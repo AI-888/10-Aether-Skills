@@ -1,0 +1,91 @@
+# RocketMQ 原子技能：排查 Kubernetes SVC 状态
+skill:
+  # 技能名称：检查指定 SVC 的事件和状态
+  name: check_svc_status
+
+  # 技能版本号
+  version: "1.0"
+
+  # 技能类型：atomic 表示原子技能（基础技能，不可再分）
+  type: atomic
+
+  # 技能描述：详细说明该技能的功能和排查范围
+  description: |
+    [内部原子技能] 排查指定 Kubernetes Service (SVC) 的运行状态。
+    通过 kubectl describe svc 获取 SVC 的 Events 信息，
+    检查是否存在 error、warn、exception 等异常事件，判断 SVC 是否健康。
+
+  # 输入参数定义
+  input_schema:
+    namespace: string    # Kubernetes 命名空间
+    svc_name: string     # Service 名称
+
+  # 输出参数定义
+  output_schema:
+    svc_health_status: string   # SVC 健康状态：正常 / 异常
+    svc_events_detail: string   # SVC Events 详细信息
+    error_summary: string       # 异常摘要（如有）
+
+  # 执行配置：定义技能的执行步骤
+  execution:
+    steps:
+      # ========================================
+      # 步骤1：获取 SVC 的 Events 信息
+      # ========================================
+      # 使用 kubectl describe svc 获取指定 SVC 的详细信息，
+      # 通过 grep Events -A 200 截取 Events 部分内容
+
+      - id: get_svc_events
+        type: tool
+        tool: exec
+        input:
+          command: >-
+            kubectl describe svc -n "{{namespace}}" "{{svc_name}}" | grep Events -A 200
+
+      # ========================================
+      # 步骤2：LLM 分析 Events 内容，判断 SVC 健康状态
+      # ========================================
+      # 判断规则：
+      #   - 包含 error、warn、exception 等关键字 → 异常
+      #   - 其余情况 → 正常
+
+      - id: analyze_svc_events
+        type: llm
+        input_from:
+          - get_svc_events.stdout
+        prompt: |
+          你是 Kubernetes Service 状态分析助手。
+          请根据 kubectl describe svc 输出的 Events 信息，判断该 SVC 的健康状态。
+
+          **判断规则：**
+          - 如果 Events 中包含 error、warn、warning、exception、failed、fail 等关键字（不区分大小写），则判定为 **异常**
+          - 如果 Events 为空（如 "<none>"）或不包含上述关键字，则判定为 **正常**
+
+          **SVC 信息：**
+          - 命名空间：{{namespace}}
+          - 服务名称：{{svc_name}}
+
+          **Events 内容：**
+          {{stdout}}
+
+          输出要求：
+          - 只输出 JSON
+          - 明确给出健康状态判定结果
+          - 如果存在异常，提取所有异常事件的关键信息（时间、类型、原因、消息）
+          - 如果正常，简要说明判定依据
+
+          JSON 格式：
+          {
+            "svc_health_status": "正常 或 异常",
+            "svc_events_detail": "Events 原始内容摘要",
+            "error_summary": "异常摘要，列出所有异常事件；若正常则填写'无异常'"
+          }
+        output_schema:
+          svc_health_status: string
+          svc_events_detail: string
+          error_summary: string
+
+  # 信号配置：控制技能的附加行为
+  signal:
+    # 是否启用置信度评估（false 表示不评估结果的可信程度）
+    enable_confidence: false

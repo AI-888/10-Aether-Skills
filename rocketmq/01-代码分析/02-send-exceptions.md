@@ -1,0 +1,71 @@
+# rocketmq java sdk 4.9.8
+我已按你指定目录把发送链路相关内容完整梳理，核心来源是 `DefaultMQProducerImpl`、`MQClientAPIImpl`、`Validators`、`DefaultMQProducer`。
+
+- **一、校验异常信息（参数/配置校验）**
+  - `Validators`
+    - `"the message is null"`
+    - `"the message body is null"`
+    - `"the message body length is zero"`
+    - `"the message body size over max value, MAX: ..."`
+    - `"The specified topic is blank"`
+    - `"The specified topic is longer than topic max length ..."`
+    - `"The specified topic[%s] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$"`
+    - `"Sending message to topic[%s] is forbidden."`
+    - `"The topic[%s] is conflict with system topic."`
+    - `"the specified group is blank"`
+    - `"the specified group is longer than group max length 255."`
+    - `"the specified group[%s] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$"`
+  - `DefaultMQProducerImpl`
+    - `"producerGroup can not equal DEFAULT_PRODUCER, please specify another one."`
+    - `"message's topic not equal mq's topic"`
+    - `"select message queue threw exception."`
+    - `"select message queue return null."`
+  - `DefaultMQProducer`
+    - `"Failed to initiate the MessageBatch"`
+
+- **二、发送失败异常信息（抛出/回调）**
+  - **超时类**
+    - `"DEFAULT ASYNC send call timeout"`
+    - `"sendDefaultImpl call timeout"`
+    - `"sendKernelImpl call timeout"`
+    - `"sendSelectImpl call timeout"`
+    - `"sendMessage call timeout"`
+    - `"call timeout"`
+    - `"wait response timeout xxxms"`
+    - `"send request message to <topic> OK, but wait reply message timeout, xxx ms."`
+  - **路由/连接/Broker 类**
+    - `"No name server address, please set it..."`
+    - `"No route info of this topic: ..."`
+    - `"No route info for this topic, ..."`
+    - `"The broker[xxx] not exist"`
+    - `"Send [n] times, still failed, cost [x]ms, Topic: ..., BrokersSent: ..."`
+    - `"send request failed"`
+    - `"unknow reseaon"`（源码原文拼写）
+    - `"unknown exception"`（`MQBrokerException` 包装为 `MQClientException`）
+  - **请求-应答发送失败**
+    - `"send request message to <topic> fail"`
+
+- **三、发送失败日志信息（`log.warn/error`）**
+  - `DefaultMQProducerImpl`
+    - `"sendKernelImpl exception, resend at once, InvokeID..., RT..., Broker..."`
+    - `"sendKernelImpl exception, throw exception, InvokeID..., RT..., Broker..."`
+    - 紧跟 `log.warn(msg.toString())` 打印消息体元信息
+    - `"tryToCompressMessage exception"`
+    - `"failed to executeSendMessageHookBefore"`
+    - `"failed to executeSendMessageHookAfter"`
+  - `MQClientAPIImpl`
+    - `"async send msg by retry {} times. topic={}, brokerAddr={}, brokerName={}"`（携带异常栈）
+
+- **四、错误码/状态映射（发送链路）**
+  - `MQClientAPIImpl.processSendResponse`
+    - `ResponseCode.SUCCESS -> SendStatus.SEND_OK`
+    - `ResponseCode.FLUSH_DISK_TIMEOUT -> SendStatus.FLUSH_DISK_TIMEOUT`
+    - `ResponseCode.FLUSH_SLAVE_TIMEOUT -> SendStatus.FLUSH_SLAVE_TIMEOUT`
+    - `ResponseCode.SLAVE_NOT_AVAILABLE -> SendStatus.SLAVE_NOT_AVAILABLE`
+    - 其他码：`throw new MQBrokerException(response.getCode(), response.getRemark(), addr)`
+  - `DefaultMQProducerImpl` 失败后补充客户端错误码
+    - `CONNECT_BROKER_EXCEPTION (10001)`
+    - `ACCESS_BROKER_TIMEOUT (10002)`
+    - `BROKER_NOT_EXIST_EXCEPTION (10003)`
+    - `NO_NAME_SERVER_EXCEPTION (10004)`
+    - `NOT_FOUND_TOPIC_EXCEPTION (10005)`

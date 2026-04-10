@@ -1,4 +1,4 @@
-ons sdk客户端错误
+# 1.8.4.final：ons sdk客户端错误
 
 ### 结论
 我已对 `ons` 全部源码（重点是 `rocketmq/remoting`、`rocketmq/client`、`ons/api/impl/rocketmq`）做了连接失败相关的**全量关键字+抛异常点**扫描，结论是连接服务端失败的报错主要收敛为 **NameServer 不可达、Broker 连接失败、请求发送失败、响应超时、Broker 路由缺失** 五大类。  

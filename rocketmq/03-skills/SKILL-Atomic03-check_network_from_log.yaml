@@ -1,52 +1,232 @@
+# RocketMQ 原子技能：基于日志排查网络连接情况
 skill:
+  # 技能名称：检查网络连接状态
   name: check_network_from_log
-  version: "1.0"
+
+  # 技能版本号
+  version: "2.0"
+
+  # 技能类型：atomic 表示原子技能（基础技能，不可再分）
   type: atomic
 
+  # 技能描述：详细说明该技能的功能和排查范围
   description: |
-    [内部原子技能] 基于rocketmq日志文件排查客户端到服务端网络连接情况。
-    先过滤日志中的接入点地址、Topic 路由地址及连接状态，再结构化输出连接结论。
+    [内部原子技能] 基于 RocketMQ sdk 日志文件排查客户端到服务端网络连接情况。
+    分三步执行：
+    1) 检查 ONS SDK 日志中的网络异常关键字（NameServer 连接失败、Broker 连接失败）
+    2) 检查 RocketMQ 社区版 SDK 日志中的网络异常关键字（待补充）
+    最终由 LLM 汇总所有步骤结果，输出结构化的网络连接诊断结论。
 
+  # 输入参数定义
   input_schema:
-    local_log_path: string
+    local_log_path: string       # 客户端日志文件路径
+    endpoint: string             # 接入点地址字符串（用于判断是否需要检查外部 SVC）
 
+  # 输出参数定义
   output_schema:
-    endpoint_connection_status: string
-    topic_route_connection_status: string
+    ons_sdk_network_status: string           # ONS SDK 网络连接检查结果
+    community_sdk_network_status: string     # 社区版 SDK 网络连接检查结果
+    svc_status: string                       # K8s SVC 状态检查结果（仅外部接入点时有值）
+    summary: string                          # 综合诊断结论
 
+  # 执行配置：定义技能的执行步骤
   execution:
     steps:
-      - id: filter_network_lines
+      # ========================================
+      # 步骤1：检查 ONS SDK 的网络日志
+      # ========================================
+      # 检查 NameServer 侧异常关键字：
+      #   - ONSClientAbstract.java: "Can not find name server, May be your network problem."
+      #                             "Can not find name server with onsAddr"
+      #   - MQClientAPIImpl.java:   "fetchNameServerAddr Exception"
+      #   - NettyRemotingClient.java: "getAndCreateNameserverChannel: try to lock name server, but timeout"
+      #                               "getAndCreateNameserverChannel: create name server channel exception"
+      #   - DefaultMQProducerImpl.java: "No name server address, please set it."
+      #
+      # 检查 Broker 连接建立失败关键字：
+      #   - NettyRemotingClient.java: "createChannel: connect remote host[...] failed"
+      #                               "createChannel: connect remote host[...] timeout"
+      #   - RemotingConnectException.java: "connect to <addr> failed"
+      #   - ProducerImpl.java (ONS 对外封装): "Connect broker failed, Topic=..., msgId=..."
+
+      - id: check_ons_sdk_network
         type: tool
         tool: exec
         input:
-          command: "grep -Ei 'access[ -]?point|namesrv|topic[ -]?route|route.*addr|connect|connection|timeout|refused|unreachable|disconnect|连接' \"{{local_log_path}}\" | tail -n 500"
+          command: >-
+            grep -Ei
+            'Can not find name server|fetchNameServerAddr Exception|getAndCreateNameserverChannel.*(timeout|exception)|No name server address|createChannel: connect remote host.*(failed|timeout)|connect to .* failed|Connect broker failed'
+            "{{local_log_path}}"
+            | tail -n 500
 
-      - id: analyze_connectivity
+      - id: analyze_ons_sdk
         type: llm
         input_from:
-          - filter_network_lines.stdout
+          - check_ons_sdk_network.stdout
         prompt: |
-          你是 RocketMQ 网络连通性分析助手。
-          请根据过滤后的日志内容，判断并输出以下两项：
-          1) 接入点连接情况
-          2) Topic 路由地址连接情况
+          你是 RocketMQ ONS SDK 网络连通性分析助手。
+          请根据日志中过滤出的关键字，分析以下两类网络问题：
 
-          过滤日志内容：
+          **NameServer 侧异常**（关注以下关键字）：
+          - "Can not find name server, May be your network problem." — 来自 ONSClientAbstract.java
+          - "Can not find name server with onsAddr" — 来自 ONSClientAbstract.java
+          - "fetchNameServerAddr Exception" — 来自 MQClientAPIImpl.java
+          - "getAndCreateNameserverChannel: try to lock name server, but timeout" — 来自 NettyRemotingClient.java
+          - "getAndCreateNameserverChannel: create name server channel exception" — 来自 NettyRemotingClient.java
+          - "No name server address, please set it." — 来自 DefaultMQProducerImpl.java
+
+          **Broker 连接建立失败**（关注以下关键字）：
+          - "createChannel: connect remote host[...] failed" — 来自 NettyRemotingClient.java
+          - "createChannel: connect remote host[...] timeout" — 来自 NettyRemotingClient.java
+          - "connect to <addr> failed" — 来自 RemotingConnectException.java
+          - "Connect broker failed, Topic=..., msgId=..." — 来自 ProducerImpl.java（ONS 对外封装）
+
+          过滤后的日志内容：
           {{stdout}}
 
           输出要求：
           - 只输出 JSON
-          - 若日志中没有足够信息，请明确写“未发现有效证据”
+          - 分别说明 NameServer 侧和 Broker 侧的连接状态
+          - 若日志中没有匹配到相关关键字，请明确写"未发现相关异常"
+          - 如果发现异常，请提取关键证据（包含时间戳、异常地址、错误信息）
 
-          JSON格式：
+          JSON 格式：
           {
-            "endpoint_connection_status": "接入点连接情况（包含成功/失败/超时及关键证据）",
-            "topic_route_connection_status": "topic路由地址连接情况（包含成功/失败/超时及关键证据）"
+            "nameserver_status": "NameServer 连接状态（正常/异常 + 关键证据）",
+            "broker_status": "Broker 连接状态（正常/异常 + 关键证据）",
+            "ons_sdk_network_status": "ONS SDK 整体网络连接结论"
           }
         output_schema:
-          endpoint_connection_status: string
-          topic_route_connection_status: string
+          ons_sdk_network_status: string
 
+      # ========================================
+      # 步骤2：检查 RocketMQ 社区版 SDK 的网络日志
+      # ========================================
+      # TODO: 内容待用户补充，当前为占位步骤
+
+      - id: check_community_sdk_network
+        type: tool
+        tool: exec
+        input:
+          command: >-
+            echo "社区版 SDK 网络检查步骤待补充"
+
+      - id: analyze_community_sdk
+        type: llm
+        input_from:
+          - check_community_sdk_network.stdout
+        prompt: |
+          你是 RocketMQ 社区版 SDK 网络连通性分析助手。
+
+          注意：当前社区版 SDK 的检查规则尚未配置，请直接输出以下 JSON：
+          {
+            "community_sdk_network_status": "社区版 SDK 网络检查规则待补充，暂无检查结果"
+          }
+
+          如果后续收到了实际的日志过滤内容，请按照与 ONS SDK 类似的方式进行分析。
+
+          过滤后的日志内容：
+          {{stdout}}
+        output_schema:
+          community_sdk_network_status: string
+
+      # ========================================
+      # 步骤3：检查 K8s RocketMQ SVC 状态（仅外部接入点）
+      # ========================================
+      # 当接入点字符串包含 "out" 关键字时，说明使用的是外部接入点，
+      # 需要检查 K8s 中 RocketMQ 相关 SVC 的状态和事件
+
+      - id: check_svc_status
+        type: tool
+        tool: exec
+        input:
+          command: >-
+            if echo "{{endpoint}}" | grep -qi "out"; then
+              echo "=== 检测到外部接入点，开始检查 RocketMQ SVC 状态 ===";
+              SVC_LIST=$(kubectl get svc -A | grep rocketmq | grep -v cmq | grep -v upay | awk '{print $1","$2}');
+              if [ -z "$SVC_LIST" ]; then
+                echo "未找到 RocketMQ 相关 SVC";
+              else
+                for item in $SVC_LIST; do
+                  NS=$(echo "$item" | cut -d',' -f1);
+                  SVC=$(echo "$item" | cut -d',' -f2);
+                  echo "--- SVC: $NS/$SVC ---";
+                  kubectl get svc -n "$NS" "$SVC" -o wide 2>&1;
+                  echo "--- Events for $NS/$SVC ---";
+                  kubectl describe svc -n "$NS" "$SVC" 2>&1 | grep -A 20 "Events:";
+                  echo "";
+                done;
+              fi;
+            else
+              echo "接入点不包含 out 关键字，跳过外部 SVC 检查";
+            fi
+
+      - id: analyze_svc
+        type: llm
+        input_from:
+          - check_svc_status.stdout
+        prompt: |
+          你是 Kubernetes 服务状态分析助手。
+          请根据 kubectl 命令的输出，分析 RocketMQ 相关 SVC 的健康状态。
+
+          命令输出：
+          {{stdout}}
+
+          输出要求：
+          - 只输出 JSON
+          - 如果跳过了检查（非外部接入点），请说明原因
+          - 如果执行了检查，请逐个 SVC 说明状态，重点关注 Events 中的 Error/Warning
+
+          JSON 格式：
+          {
+            "svc_status": "SVC 状态总结（包含各 SVC 的健康状态、异常事件等）"
+          }
+        output_schema:
+          svc_status: string
+
+      # ========================================
+      # 步骤4：LLM 汇总所有步骤结果，输出综合诊断结论
+      # ========================================
+
+      - id: summarize_all
+        type: llm
+        input_from:
+          - analyze_ons_sdk.ons_sdk_network_status
+          - analyze_community_sdk.community_sdk_network_status
+          - analyze_svc.svc_status
+        prompt: |
+          你是 RocketMQ 网络连通性综合诊断助手。
+          请根据以下各步骤的检查结果，输出一份完整的网络连接诊断报告。
+
+          **ONS SDK 网络检查结果：**
+          {{ons_sdk_network_status}}
+
+          **社区版 SDK 网络检查结果：**
+          {{community_sdk_network_status}}
+
+          **K8s SVC 状态检查结果：**
+          {{svc_status}}
+
+          输出要求：
+          - 只输出 JSON
+          - 综合所有检查结果，给出整体网络连接状态判断
+          - 如果发现问题，请给出排查建议
+          - 按严重程度排序问题
+
+          JSON 格式：
+          {
+            "ons_sdk_network_status": "ONS SDK 网络连接状态摘要",
+            "community_sdk_network_status": "社区版 SDK 网络连接状态摘要",
+            "svc_status": "K8s SVC 状态摘要",
+            "summary": "综合诊断结论，包含问题列表和排查建议"
+          }
+        output_schema:
+          ons_sdk_network_status: string
+          community_sdk_network_status: string
+          svc_status: string
+          summary: string
+
+  # 信号配置：控制技能的附加行为
   signal:
+    # 是否启用置信度评估（false 表示不评估结果的可信程度）
     enable_confidence: false
