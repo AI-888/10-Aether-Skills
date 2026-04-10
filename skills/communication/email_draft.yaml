@@ -1,0 +1,126 @@
+name: email_draft
+version: "1.0.0"
+description: >
+  Draft a professional email based on the provided context, recipient,
+  subject, and desired tone. Returns a complete email with subject line,
+  greeting, body, and closing.
+category: communication
+author: Aether Team
+tags:
+  - email
+  - communication
+  - writing
+  - draft
+  - professional
+
+parameters:
+  - name: recipient_name
+    type: string
+    description: Full name of the email recipient.
+    required: true
+
+  - name: sender_name
+    type: string
+    description: Full name of the email sender.
+    required: true
+
+  - name: subject
+    type: string
+    description: The topic or purpose of the email.
+    required: true
+
+  - name: key_points
+    type: array
+    description: List of key points or information to include in the email body.
+    required: true
+
+  - name: tone
+    type: string
+    description: Desired tone of the email.
+    required: false
+    default: "professional"
+    enum:
+      - "professional"
+      - "friendly"
+      - "formal"
+      - "apologetic"
+      - "persuasive"
+
+  - name: language
+    type: string
+    description: BCP-47 language code for the email language (e.g. "en", "zh").
+    required: false
+    default: "en"
+
+output:
+  type: object
+  description: A complete drafted email ready to send.
+  schema:
+    type: object
+    properties:
+      subject:
+        type: string
+        description: The email subject line.
+      body:
+        type: string
+        description: The full email body including greeting and closing.
+
+examples:
+  - description: Draft a meeting request email
+    input:
+      recipient_name: "Dr. Sarah Chen"
+      sender_name: "James Liu"
+      subject: "Request for project kick-off meeting"
+      key_points:
+        - "We are ready to start the Q3 data migration project."
+        - "Requesting a 30-minute call next week to align on goals and timeline."
+        - "Flexible on timing — Tuesday or Wednesday afternoon works best."
+      tone: "professional"
+    output:
+      subject: "Request for Project Kick-Off Meeting — Q3 Data Migration"
+      body: |
+        Dear Dr. Chen,
+
+        I hope this message finds you well. I am writing to request a brief kick-off meeting
+        for the Q3 data migration project, as our team is now ready to move forward.
+
+        We would love to schedule a 30-minute call next week to align on project goals and
+        the overall timeline. Tuesday or Wednesday afternoon would work best on our end,
+        but we are happy to accommodate your availability.
+
+        Please let me know a time that suits you, and I will send a calendar invitation.
+
+        Thank you for your time, and I look forward to collaborating with you.
+
+        Best regards,
+        James Liu
+
+  - description: Draft an apology email for a missed deadline
+    input:
+      recipient_name: "Manager Wang"
+      sender_name: "Alex Zhang"
+      subject: "Apology for delayed report submission"
+      key_points:
+        - "The monthly report was submitted two days late."
+        - "The delay was caused by unexpected data pipeline issues."
+        - "Steps have been taken to prevent this in the future."
+      tone: "apologetic"
+    output:
+      subject: "Apology for Delayed Report Submission"
+      body: |
+        Dear Manager Wang,
+
+        I sincerely apologize for submitting the monthly report two days past the deadline.
+
+        The delay was caused by unexpected issues with our data pipeline that required
+        additional time to resolve and validate. I take full responsibility for not
+        communicating the situation earlier.
+
+        I have since identified the root cause and implemented safeguards to prevent
+        similar delays in the future. The completed report is attached for your review.
+
+        Thank you for your understanding, and I am committed to meeting all future
+        deadlines without exception.
+
+        Sincerely,
+        Alex Zhang
