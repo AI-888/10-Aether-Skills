@@ -1,0 +1,35 @@
+ons sdk客户端错误
+
+### 结论
+我已对 `ons` 全部源码（重点是 `rocketmq/remoting`、`rocketmq/client`、`ons/api/impl/rocketmq`）做了连接失败相关的**全量关键字+抛异常点**扫描，结论是连接服务端失败的报错主要收敛为 **NameServer 不可达、Broker 连接失败、请求发送失败、响应超时、Broker 路由缺失** 五大类。  
+
+### 连接失败报错/异常清单（去重后）
+- **NameServer 侧**
+  - `ONSClientAbstract.java`：`Can not find name server, May be your network problem.`、`Can not find name server with onsAddr ...`
+  - `MQClientAPIImpl.java`：`fetchNameServerAddr Exception`
+  - `NettyRemotingClient.java`：`getAndCreateNameserverChannel: try to lock name server, but timeout...`、`getAndCreateNameserverChannel: create name server channel exception`
+  - `DefaultMQProducerImpl.java`：`No name server address, please set it.`
+- **Broker 连接建立失败**
+  - `NettyRemotingClient.java`：`createChannel: connect remote host[...] failed`、`createChannel: connect remote host[...] timeout ...ms`
+  - `RemotingConnectException.java`：`connect to <addr> failed`
+  - `ProducerImpl.java`（ONS 对外封装）：`Connect broker failed, Topic=..., msgId=...`
+- **请求发送失败/通道异常**
+  - `NettyRemotingAbstract.java`：`send a request command to channel <...> failed.`、`... Exception`
+  - `RemotingSendRequestException.java`：`send request to <addr> failed`
+  - `NettyRemotingClient.java`：`invokeSync/invokeAsync/invokeOneway: send request exception, so close the channel[...]`
+- **请求超时/无响应**
+  - `NettyRemotingClient.java`：`invokeSync: wait response timeout exception...`、`invokeSync: close socket because of timeout...`
+  - `NettyRemotingAbstract.java`：`remove timeout request...`、`invokeAsyncImpl tryAcquire semaphore timeout...`
+  - `RemotingTimeoutException.java`：`wait response on the channel <addr> timeout, xxx(ms)`
+  - `ProducerImpl.java`（ONS 对外封装）：`Send message to broker timeout, ...ms, Topic=..., msgId=...`
+- **Broker/路由不可用（连接相关上游症状）**
+  - `MQClientInstance.java`：`send heart beat to broker[...] failed`、`... broker not up, forget it`、`updateTopicRouteInfoFromNameServer ... return null/Exception`
+  - `DefaultMQProducerImpl.java`：`No route info of this topic...`
+  - `PullAPIWrapper.java`、`RemoteBrokerOffsetStore.java`：`The broker[xxx] not exist`
+
+### 异常链路（最终会抛给业务侧）
+- **底层 remoting**：`RemotingConnectException` / `RemotingSendRequestException` / `RemotingTimeoutException`（`remoting/exception`）  
+- **客户端聚合**：`DefaultMQProducerImpl` 将其包装为 `MQClientException` 并打 `CONNECT_BROKER_EXCEPTION`、`ACCESS_BROKER_TIMEOUT` 等码  
+- **ONS SDK 对外**：`ProducerImpl.checkProducerException` 再翻译成你线上常见中文语义（连接 broker 失败、发送超时等）并附 FAQ 链接。  
+
+如果你愿意，我下一步可以按你线上日志中的**具体异常文案**反查到这份清单里的**唯一源码触发点**，直接定位优先排查项。

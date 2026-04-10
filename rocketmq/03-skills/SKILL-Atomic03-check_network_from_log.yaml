@@ -1,0 +1,52 @@
+skill:
+  name: check_network_from_log
+  version: "1.0"
+  type: atomic
+
+  description: |
+    [内部原子技能] 基于rocketmq日志文件排查客户端到服务端网络连接情况。
+    先过滤日志中的接入点地址、Topic 路由地址及连接状态，再结构化输出连接结论。
+
+  input_schema:
+    local_log_path: string
+
+  output_schema:
+    endpoint_connection_status: string
+    topic_route_connection_status: string
+
+  execution:
+    steps:
+      - id: filter_network_lines
+        type: tool
+        tool: exec
+        input:
+          command: "grep -Ei 'access[ -]?point|namesrv|topic[ -]?route|route.*addr|connect|connection|timeout|refused|unreachable|disconnect|连接' \"{{local_log_path}}\" | tail -n 500"
+
+      - id: analyze_connectivity
+        type: llm
+        input_from:
+          - filter_network_lines.stdout
+        prompt: |
+          你是 RocketMQ 网络连通性分析助手。
+          请根据过滤后的日志内容，判断并输出以下两项：
+          1) 接入点连接情况
+          2) Topic 路由地址连接情况
+
+          过滤日志内容：
+          {{stdout}}
+
+          输出要求：
+          - 只输出 JSON
+          - 若日志中没有足够信息，请明确写“未发现有效证据”
+
+          JSON格式：
+          {
+            "endpoint_connection_status": "接入点连接情况（包含成功/失败/超时及关键证据）",
+            "topic_route_connection_status": "topic路由地址连接情况（包含成功/失败/超时及关键证据）"
+          }
+        output_schema:
+          endpoint_connection_status: string
+          topic_route_connection_status: string
+
+  signal:
+    enable_confidence: false

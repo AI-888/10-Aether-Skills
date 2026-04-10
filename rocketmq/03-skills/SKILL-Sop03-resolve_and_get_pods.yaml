@@ -1,0 +1,111 @@
+# RocketMQ SOP 技能：智能解析组件名称并获取 Pod 列表
+skill:
+  # 技能名称：包含组件名称解析和 Pod 查询的完整流程
+  name: resolve_and_get_rocketmq_pods
+
+  # 技能版本号
+  version: "1.0"
+
+  # 技能类型：sop 表示标准操作流程（由多个步骤组成的复合技能）
+  type: sop
+
+  # 技能描述：面向用户简单查询场景，覆盖自然语言到 k8s 关键字的映射
+  description: |
+    查询 RocketMQ 组件的 Pod 列表、进程状态、服务运行信息。
+    自动将用户输入的组件简称映射为 Kubernetes 中的实际关键字。
+
+    使用场景：用户询问 "查询 Pod"、"查看 Broker Pod"、"查询 Broker 组件"、
+    "Namesrv 进程"、"Proxy 服务状态"、"显示所有 Pod"、"查看组件运行状态"、
+    "broker 状态"、"查询全部 Pod"、"RocketMQ 组件信息"、
+    "rocketmq broker"、"rocketmq namesrv"、"rocketmq proxy" 等
+
+    支持的组件简称与 Kubernetes 关键字对照：
+    - namesrv / nameserver → ocloud-tdmq-rocketmq5-namesrv
+    - broker → ocloud-tdmq-rocketmq5-broker
+    - proxy → ocloud-tdmq-rocketmq5-proxy
+    - manager → rocketmq-manager（需排除 cmq）
+    - billing → rocketmq-billing（需排除 cmq）
+    - operation → rocketmq-operation（需排除 cmq）
+    - router → rocketmq-router（需排除 cmq）
+    - disperser → rocketmq-disperser（需排除 cmq）
+
+  # 输入参数定义
+  input_schema:
+    param1: string         # 用户输入的原始文本
+
+  # 输出参数定义
+  output_schema:
+    pods: list                 # Pod 列表，包含每个 Pod 的详细信息
+    total: int                 # Pod 总数
+
+  # 执行步骤（按顺序执行）
+  execution:
+    steps:
+
+    # ── 步骤1：LLM 提取并映射组件名称 ──
+    # 将用户输入的自然语言组件名（如 "broker"）映射为 k8s 实际关键字
+    - id: resolve_component
+      type: llm
+      input:
+        param1: "{{user_input}}"
+      prompt: |
+        你是一个信息抽取器，只做字段提取，不做解释。
+        【任务】
+        从用户输入中提取3个字段，并输出JSON：
+
+        - namespace
+        - component_keyword
+        - exclude_keywords
+
+        【组件枚举（只能选一个）】
+        broker -> ocloud-tdmq-rocketmq5-broker
+        namesrv -> ocloud-tdmq-rocketmq5-namesrv
+        proxy -> ocloud-tdmq-rocketmq5-proxy
+        manager -> ocloud-tdmq-rocketmq-manager
+
+        【规则】
+        1. component_keyword 必须从上面枚举中选择一个
+        2. namespace 如果没有，填 ""
+        3. exclude 如果没有，填 ""
+        4. 只输出 JSON，不要任何解释
+        5. JSON 必须是一行
+        6. 必须排除 cmq
+
+        【输出格式（严格照抄key）】
+        {"namespace":"","component_keyword":"","exclude_keywords":""}
+
+        【示例】
+        输入: 查询 rocketmq broker pod
+        输出: {"namespace":"","component_keyword":"ocloud-tdmq-rocketmq5-broker","exclude_keywords":""}
+
+        输入: 查一下 test-ns 的 proxy
+        输出: {"namespace":"test-ns","component_keyword":"ocloud-tdmq-rocketmq5-proxy","exclude_keywords":""}
+
+        输入: 查询 broker 排除 cmq
+        输出: {"namespace":"","component_keyword":"ocloud-tdmq-rocketmq5-broker","exclude_keywords":"cmq"}
+
+        【开始】
+        输入: {{param1}}
+        输出:
+
+      output_schema:
+        component_keyword: string
+        exclude_keywords: string
+        namespace: string
+
+    # ── 步骤2：调用 kubectl 获取 Pod 列表 ──
+    # 使用步骤1解析后的关键字查询 Pod
+    - id: get_rocketmq_pods
+      type: skill
+      skill: get_rocketmq_pods
+      input:
+        namespace: "{{resolve_component.namespace}}"
+        component_keyword: "{{resolve_component.component_keyword}}"
+        exclude_keywords: "{{resolve_component.exclude_keywords}}"
+      output_schema:
+        pods: list                 # Pod 列表，包含每个 Pod 的详细信息
+        total: int                 # Pod 总数
+
+  # 信号配置
+  signal:
+    enable_confidence: false

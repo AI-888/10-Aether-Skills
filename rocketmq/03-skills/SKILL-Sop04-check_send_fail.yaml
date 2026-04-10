@@ -1,0 +1,262 @@
+skill:
+  name: check_send_fail
+  version: "2.0"
+  type: sop
+
+  description: |
+    排查 RocketMQ 生产/发送消息失败、超时问题。
+    将排查过程拆分为 5 个维度：客户端、网络、NameServer、Broker、Topic。
+
+    使用场景：
+    - 用户反馈发送超时、发送失败、消息投递异常
+    - 用户反馈 No route info、topic 不可写、broker busy 等
+    - 用户希望获得结构化排查路径和修复优先级
+
+  input_schema:
+    param1: string
+
+  output_schema:
+    summary: string
+    root_cause: string
+    recommendation: string
+    priority: string
+    confidence: float
+    need_more_check: boolean
+
+  execution:
+    steps:
+
+      - id: extract_context
+        type: llm
+        input:
+          param1: "{{user_input}}"
+        prompt: |
+          你是运维排障信息抽取器，只输出 JSON。
+          请从用户输入中提取以下字段，缺失填空字符串：
+          {
+            "topic": "",
+            "namesrv_addr": "",
+            "broker_addr": "",
+            "namespace": "",
+            "symptom": "",
+            "error_keyword": "",
+            "log_file_path": ""
+          }
+
+          用户输入：{{param1}}
+        output_schema:
+          topic: string
+          namesrv_addr: string
+          broker_addr: string
+          namespace: string
+          symptom: string
+          error_keyword: string
+          log_file_path: string
+
+      - id: check_client
+        type: llm
+        input_from:
+          - extract_context.symptom
+          - extract_context.error_keyword
+        prompt: |
+          基于 RocketMQ 发送失败排查手册，输出“客户端问题(Producer)”排查计划。
+
+          重点覆盖：
+          1) namesrvAddr 配置是否正确（IP:PORT，多个分号分隔）
+          2) sendMsgTimeout 是否过短（默认 3s，可按网络延迟调整到 5~10s）
+          3) 消息体是否超过 maxMessageSize（默认 4MB）
+          4) ACL 凭证和 PUB 权限是否匹配（含 AclException 关键字）
+          5) Producer 状态是否 RUNNING（是否提前 shutdown）
+          6) 客户端与 Broker 大版本兼容性（5.x 与 4.x 协议差异）
+
+          当前症状：{{symptom}}
+          错误关键字：{{error_keyword}}
+
+          请输出 JSON：
+          {
+            "client_check_items": "分点列出检查项",
+            "client_commands": "建议执行的命令/动作",
+            "client_pass_criteria": "通过标准",
+            "client_suspected_issue": "最可疑客户端问题"
+          }
+        output_schema:
+          client_check_items: string
+          client_commands: string
+          client_pass_criteria: string
+          client_suspected_issue: string
+
+      - id: check_network
+        type: skill
+        skill: check_network_from_log
+        input:
+          local_log_path: "{{extract_context.log_file_path}}"
+        output_schema:
+          endpoint_connection_status: string
+          topic_route_connection_status: string
+
+      - id: check_namesrv
+        type: llm
+        input_from:
+          - extract_context.topic
+          - extract_context.namesrv_addr
+        prompt: |
+          基于 RocketMQ 发送失败排查手册，输出“NameServer 问题”排查计划。
+
+          重点覆盖：
+          1) NameServer 进程与日志状态（NamesrvStartup、namesrv.log）
+          2) NameServer 负载（CPU/内存/连接状态）
+          3) Broker 心跳超时被剔除，导致路由丢失（topicRoute）
+          4) 多 NameServer 节点路由一致性对比
+
+          Topic：{{topic}}
+          NameServer：{{namesrv_addr}}
+
+          请输出 JSON：
+          {
+            "namesrv_check_items": "分点列出检查项",
+            "namesrv_commands": "建议执行的命令",
+            "namesrv_pass_criteria": "通过标准",
+            "namesrv_suspected_issue": "最可疑 NameServer 问题"
+          }
+        output_schema:
+          namesrv_check_items: string
+          namesrv_commands: string
+          namesrv_pass_criteria: string
+          namesrv_suspected_issue: string
+
+      - id: check_broker
+        type: llm
+        input_from:
+          - extract_context.broker_addr
+          - extract_context.namesrv_addr
+        prompt: |
+          基于 RocketMQ 发送失败排查手册，输出“Broker 问题”排查计划。
+
+          重点覆盖：
+          1) Broker 进程与 broker.log
+          2) 磁盘空间阈值（diskMaxUsedSpaceRatio）
+          3) broker busy / PAGE_WRITE_BUSY 等流控关键字
+          4) 磁盘 I/O 指标（%util、await）
+          5) Broker 权限是否只读（perm）
+
+          Broker：{{broker_addr}}
+          NameServer：{{namesrv_addr}}
+
+          请输出 JSON：
+          {
+            "broker_check_items": "分点列出检查项",
+            "broker_commands": "建议执行的命令",
+            "broker_pass_criteria": "通过标准",
+            "broker_suspected_issue": "最可疑 Broker 问题"
+          }
+        output_schema:
+          broker_check_items: string
+          broker_commands: string
+          broker_pass_criteria: string
+          broker_suspected_issue: string
+
+      - id: check_topic
+        type: llm
+        input_from:
+          - extract_context.topic
+          - extract_context.namesrv_addr
+          - extract_context.broker_addr
+        prompt: |
+          基于 RocketMQ 发送失败排查手册，输出“Topic 问题”排查计划。
+
+          重点覆盖：
+          1) Topic 是否存在、是否开启自动创建
+          2) Topic 路由是否包含不可达地址
+          3) Topic perm 是否可写（perm=6）
+          4) Message Queue 是否全部不可用（Broker 存活性）
+
+          Topic：{{topic}}
+          NameServer：{{namesrv_addr}}
+          Broker：{{broker_addr}}
+
+          请输出 JSON：
+          {
+            "topic_check_items": "分点列出检查项",
+            "topic_commands": "建议执行的命令",
+            "topic_pass_criteria": "通过标准",
+            "topic_suspected_issue": "最可疑 Topic 问题"
+          }
+        output_schema:
+          topic_check_items: string
+          topic_commands: string
+          topic_pass_criteria: string
+          topic_suspected_issue: string
+
+      - id: conclusion
+        type: llm
+        input_from:
+          - extract_context.symptom
+          - extract_context.error_keyword
+          - check_client.client_suspected_issue
+          - check_network.endpoint_connection_status
+          - check_network.topic_route_connection_status
+          - check_namesrv.namesrv_suspected_issue
+          - check_broker.broker_suspected_issue
+          - check_topic.topic_suspected_issue
+          - check_client.client_commands
+          - check_namesrv.namesrv_commands
+
+          - check_broker.broker_commands
+          - check_topic.topic_commands
+        prompt: |
+          根据各维度排查结果，生成最终分析报告。
+
+          用户症状：{{symptom}}
+          错误关键字：{{error_keyword}}
+
+          候选问题：
+          - 客户端：{{client_suspected_issue}}
+          - 网络（接入点）：{{endpoint_connection_status}}
+          - 网络（路由地址）：{{topic_route_connection_status}}
+          - NameServer：{{namesrv_suspected_issue}}
+          - Broker：{{broker_suspected_issue}}
+          - Topic：{{topic_suspected_issue}}
+
+          参考动作：
+          - 客户端：{{client_commands}}
+          - NameServer：{{namesrv_commands}}
+          - Broker：{{broker_commands}}
+          - Topic：{{topic_commands}}
+
+          请输出 JSON：
+          {
+            "summary": "问题概述",
+            "root_cause": "根本原因分析",
+            "recommendation": "修复建议（按优先级分步给出）",
+            "priority": "处理优先级（高/中/低）"
+          }
+        output_schema:
+          summary: string
+          root_cause: string
+          recommendation: string
+          priority: string
+
+      - id: finalize
+        type: python
+        input_from:
+          - conclusion.summary
+          - conclusion.root_cause
+          - conclusion.recommendation
+          - conclusion.priority
+        code: |
+          result = {
+            "summary": summary,
+            "root_cause": root_cause,
+            "recommendation": recommendation,
+            "priority": priority,
+            "confidence": 0.85 if priority == "高" else 0.75,
+            "need_more_check": priority == "高"
+          }
+          return result
+
+  policy:
+    timeout: 30
+    retry: 1
+
+  signal:
+    enable_confidence: false

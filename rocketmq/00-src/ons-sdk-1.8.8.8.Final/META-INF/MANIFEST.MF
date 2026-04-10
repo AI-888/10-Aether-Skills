@@ -1,0 +1,12 @@
+Manifest-Version: 1.0
+Implementation-Title: ons-client 1.8.8.8.Final
+Build-Branch: f5ded0b55fc1f075925ab8cfd71e099a306c397e
+Implementation-Version: 1.8.8.8.Final
+Build-Timestamp: 2023-01-31T15:46:27Z
+Specification-Title: ons-client 1.8.8.8.Final
+Project-Version: 1.8.8.8.Final
+Git-Revision: f5ded0b55fc1f075925ab8cfd71e099a306c397e
+Build-Jdk-Spec: 1.8
+Created-By: Maven Jar Plugin 3.2.0
+Specification-Version: 0.0
+
