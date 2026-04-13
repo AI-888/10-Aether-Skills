@@ -6,7 +6,7 @@ skill:
   description: |
     排查 RocketMQ 生产/发送消息失败、超时问题。
     将排查过程拆分为 5 个维度：客户端、网络、NameServer、Broker、Topic。
-
+    
     使用场景：
     - 用户反馈发送超时、发送失败、消息投递异常
     - 用户反馈 No route info、topic 不可写、broker busy 等
@@ -28,8 +28,6 @@ skill:
 
       - id: extract_context
         type: llm
-        input:
-          param1: "{{user_input}}"
         prompt: |
           你是运维排障信息抽取器，只输出 JSON。
           请从用户输入中提取以下字段，缺失填空字符串：
@@ -42,7 +40,7 @@ skill:
             "error_keyword": "",
             "log_file_path": ""
           }
-
+          
           用户输入：{{param1}}
         output_schema:
           topic: string
@@ -60,7 +58,7 @@ skill:
           - extract_context.error_keyword
         prompt: |
           基于 RocketMQ 发送失败排查手册，输出“客户端问题(Producer)”排查计划。
-
+          
           重点覆盖：
           1) namesrvAddr 配置是否正确（IP:PORT，多个分号分隔）
           2) sendMsgTimeout 是否过短（默认 3s，可按网络延迟调整到 5~10s）
@@ -68,10 +66,10 @@ skill:
           4) ACL 凭证和 PUB 权限是否匹配（含 AclException 关键字）
           5) Producer 状态是否 RUNNING（是否提前 shutdown）
           6) 客户端与 Broker 大版本兼容性（5.x 与 4.x 协议差异）
-
+          
           当前症状：{{symptom}}
           错误关键字：{{error_keyword}}
-
+          
           请输出 JSON：
           {
             "client_check_items": "分点列出检查项",
@@ -90,9 +88,6 @@ skill:
         skill: check_network_from_log
         input:
           local_log_path: "{{extract_context.log_file_path}}"
-        output_schema:
-          endpoint_connection_status: string
-          topic_route_connection_status: string
 
       - id: check_namesrv
         type: llm
@@ -101,16 +96,16 @@ skill:
           - extract_context.namesrv_addr
         prompt: |
           基于 RocketMQ 发送失败排查手册，输出“NameServer 问题”排查计划。
-
+          
           重点覆盖：
           1) NameServer 进程与日志状态（NamesrvStartup、namesrv.log）
           2) NameServer 负载（CPU/内存/连接状态）
           3) Broker 心跳超时被剔除，导致路由丢失（topicRoute）
           4) 多 NameServer 节点路由一致性对比
-
+          
           Topic：{{topic}}
           NameServer：{{namesrv_addr}}
-
+          
           请输出 JSON：
           {
             "namesrv_check_items": "分点列出检查项",
@@ -131,17 +126,17 @@ skill:
           - extract_context.namesrv_addr
         prompt: |
           基于 RocketMQ 发送失败排查手册，输出“Broker 问题”排查计划。
-
+          
           重点覆盖：
           1) Broker 进程与 broker.log
           2) 磁盘空间阈值（diskMaxUsedSpaceRatio）
           3) broker busy / PAGE_WRITE_BUSY 等流控关键字
           4) 磁盘 I/O 指标（%util、await）
           5) Broker 权限是否只读（perm）
-
+          
           Broker：{{broker_addr}}
           NameServer：{{namesrv_addr}}
-
+          
           请输出 JSON：
           {
             "broker_check_items": "分点列出检查项",
@@ -163,17 +158,17 @@ skill:
           - extract_context.broker_addr
         prompt: |
           基于 RocketMQ 发送失败排查手册，输出“Topic 问题”排查计划。
-
+          
           重点覆盖：
           1) Topic 是否存在、是否开启自动创建
           2) Topic 路由是否包含不可达地址
           3) Topic perm 是否可写（perm=6）
           4) Message Queue 是否全部不可用（Broker 存活性）
-
+          
           Topic：{{topic}}
           NameServer：{{namesrv_addr}}
           Broker：{{broker_addr}}
-
+          
           请输出 JSON：
           {
             "topic_check_items": "分点列出检查项",
@@ -200,15 +195,14 @@ skill:
           - check_topic.topic_suspected_issue
           - check_client.client_commands
           - check_namesrv.namesrv_commands
-
           - check_broker.broker_commands
           - check_topic.topic_commands
         prompt: |
           根据各维度排查结果，生成最终分析报告。
-
+          
           用户症状：{{symptom}}
           错误关键字：{{error_keyword}}
-
+          
           候选问题：
           - 客户端：{{client_suspected_issue}}
           - 网络（接入点）：{{endpoint_connection_status}}
@@ -216,13 +210,13 @@ skill:
           - NameServer：{{namesrv_suspected_issue}}
           - Broker：{{broker_suspected_issue}}
           - Topic：{{topic_suspected_issue}}
-
+          
           参考动作：
           - 客户端：{{client_commands}}
           - NameServer：{{namesrv_commands}}
           - Broker：{{broker_commands}}
           - Topic：{{topic_commands}}
-
+          
           请输出 JSON：
           {
             "summary": "问题概述",
@@ -256,7 +250,6 @@ skill:
 
   policy:
     timeout: 30
-    retry: 1
 
   signal:
     enable_confidence: false
