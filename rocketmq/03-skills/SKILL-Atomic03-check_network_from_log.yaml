@@ -51,6 +51,7 @@ skill:
 
       - id: check_ons_sdk_network
         type: tool
+        description: "调用工具exec并获取步骤所需数据。"
         tool: exec
         input:
           command: >-
@@ -61,6 +62,7 @@ skill:
 
       - id: analyze_ons_sdk
         type: llm
+        description: "基于输入信息进行智能分析并输出结构化结论。"
         input_from:
           - check_ons_sdk_network.stdout
         prompt: |
@@ -106,6 +108,7 @@ skill:
 
       - id: check_community_sdk_network
         type: tool
+        description: "调用工具exec并获取步骤所需数据。"
         tool: exec
         input:
           command: >-
@@ -113,6 +116,7 @@ skill:
 
       - id: analyze_community_sdk
         type: llm
+        description: "基于输入信息进行智能分析并输出结构化结论。"
         input_from:
           - check_community_sdk_network.stdout
         prompt: |
@@ -138,6 +142,7 @@ skill:
 
       - id: check_svc_status
         type: tool
+        description: "调用工具exec并获取步骤所需数据。"
         tool: exec
         input:
           command: >-
@@ -163,6 +168,7 @@ skill:
 
       - id: analyze_svc
         type: llm
+        description: "基于输入信息进行智能分析并输出结构化结论。"
         input_from:
           - check_svc_status.stdout
         prompt: |
@@ -190,6 +196,7 @@ skill:
 
       - id: summarize_all
         type: llm
+        description: "基于输入信息进行智能分析并输出结构化结论。"
         input_from:
           - analyze_ons_sdk.ons_sdk_network_status
           - analyze_community_sdk.community_sdk_network_status

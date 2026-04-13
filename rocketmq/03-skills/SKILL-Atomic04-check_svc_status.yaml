@@ -37,6 +37,7 @@ skill:
 
       - id: get_svc_events
         type: tool
+        description: "调用工具exec并获取步骤所需数据。"
         tool: exec
         input:
           command: >-
@@ -51,6 +52,7 @@ skill:
 
       - id: analyze_svc_events
         type: llm
+        description: "基于输入信息进行智能分析并输出结构化结论。"
         input_from:
           - get_svc_events.stdout
         prompt: |

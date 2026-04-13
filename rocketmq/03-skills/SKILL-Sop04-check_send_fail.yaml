@@ -28,31 +28,29 @@ skill:
 
       - id: extract_context
         type: llm
+        description: |
+          从用户输入中提取关键信息， 具体查看提示词
         prompt: |
           你是运维排障信息抽取器，只输出 JSON。
           请从用户输入中提取以下字段，缺失填空字符串：
           {
             "topic": "",
-            "namesrv_addr": "",
-            "broker_addr": "",
-            "namespace": "",
-            "symptom": "",
-            "error_keyword": "",
+            "endpoint": "",
+            "instance_id": "",
             "log_file_path": ""
           }
           
           用户输入：{{param1}}
         output_schema:
           topic: string
-          namesrv_addr: string
-          broker_addr: string
-          namespace: string
-          symptom: string
-          error_keyword: string
+          endpoint: string
+          instance_id: string
           log_file_path: string
 
       - id: check_client
         type: llm
+        description: |
+          "基于输入信息进行智能分析并输出结构化结论。"
         input_from:
           - extract_context.symptom
           - extract_context.error_keyword
@@ -85,12 +83,16 @@ skill:
 
       - id: check_network
         type: skill
+        description: |
+          "调用技能check_network_from_log并获取分析结果。"
         skill: check_network_from_log
         input:
           local_log_path: "{{extract_context.log_file_path}}"
 
       - id: check_namesrv
         type: llm
+        description: |
+          "基于输入信息进行智能分析并输出结构化结论。"
         input_from:
           - extract_context.topic
           - extract_context.namesrv_addr
@@ -121,6 +123,8 @@ skill:
 
       - id: check_broker
         type: llm
+        description: |
+          "基于输入信息进行智能分析并输出结构化结论。"
         input_from:
           - extract_context.broker_addr
           - extract_context.namesrv_addr
@@ -152,6 +156,8 @@ skill:
 
       - id: check_topic
         type: llm
+        description: |
+          "基于输入信息进行智能分析并输出结构化结论。"
         input_from:
           - extract_context.topic
           - extract_context.namesrv_addr
@@ -184,6 +190,8 @@ skill:
 
       - id: conclusion
         type: llm
+        description: |
+          "基于输入信息进行智能分析并输出结构化结论。"
         input_from:
           - extract_context.symptom
           - extract_context.error_keyword
@@ -232,6 +240,8 @@ skill:
 
       - id: finalize
         type: python
+        description: |
+          "对上游输入进行程序化处理并返回结果。"
         input_from:
           - conclusion.summary
           - conclusion.root_cause

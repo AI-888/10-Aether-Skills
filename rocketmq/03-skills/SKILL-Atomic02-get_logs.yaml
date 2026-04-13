@@ -47,6 +47,7 @@ skill:
       - id: fetch
         # 步骤类型：tool 表示调用外部工具
         type: tool
+        description: "调用工具kubectl_query_log并获取步骤所需数据。"
         # 使用的工具名称：kubectl 查询日志
         tool: kubectl_query_log
         # 传递给工具的输入参数

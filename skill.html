@@ -813,7 +813,7 @@
         }
 
         function parseStepBlock(raw) {
-            const step = { id: '', type: '', fields: {} };
+            const step = { id: '', type: '', description: '', fields: {} };
             const lines = raw.split('\n');
 
             for (const line of lines) {
@@ -821,7 +821,11 @@
                 else if (/^\s+type:\s*(.+)/.test(line)) step.type = RegExp.$1.trim();
             }
 
+            // 提取步骤说明（支持单行与多行）
+            step.description = extractNestedBlock(raw, 'description') || '';
+
             // 根据 type 提取不同字段
+
             if (step.type === 'tool' || step.type === 'skill') {
                 // 提取 tool/skill 名称
                 const toolMatch = raw.match(/^\s+(tool|skill):\s*(.+)$/m);
@@ -1058,7 +1062,12 @@
                             </select>
                         </div>
                     </div>
+                    <div class="form-group full-width" style="margin-bottom: 12px;">
+                        <label>步骤说明</label>
+                        <textarea rows="3" placeholder="填写该步骤的执行说明" onchange="parsedData.steps[${idx}].description=this.value">${escHtml(step.description || '')}</textarea>
+                    </div>
                 `;
+
                 panel.appendChild(innerHtml);
                 panel.appendChild(renderStepFields(step, idx));
                 content.appendChild(panel);
@@ -1784,7 +1793,12 @@
 
         function serializeStepFields(step) {
             let yaml = '';
+            if (step.description) {
+                yaml += '        description: |\n';
+                step.description.split('\n').forEach(l => yaml += `          ${l}\n`);
+            }
             if (step.type === 'tool' || step.type === 'skill') {
+
                 if (step.fields[step.type]) yaml += `        ${step.type}: ${step.fields[step.type]}\n`;
                 const input = step.fields.input || [];
                 if (input.length > 0) {

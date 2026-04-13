@@ -1,0 +1,161 @@
+# RocketMQ 原子技能：从参数与文件中摘取关键字段
+skill:
+  # 技能名称：提取 RocketMQ 接入与排障关键字段
+  name: extract_mq_fields
+
+  # 技能版本号
+  version: "1.0"
+
+  # 技能类型：atomic 表示原子技能（基础技能，不可再分）
+  type: atomic
+
+  # 技能描述：参数优先，文件补充，统一提取结构化字段
+  description: |
+    [内部原子技能] 从输入参数与输入文件中摘取 RocketMQ 关键字段。
+
+    目标输出字段：
+    - 接入点 nameserver
+    - Topic
+    - 消费者组 consumer_group
+    - Topic 路由 topic_route
+    - 错误日志数组 error_logs
+
+    提取策略：
+    1) 参数优先：若输入参数已提供非空值，优先使用参数值。
+    2) 文件补充：参数缺失时，从文件内容和 raw_text 中提取。
+    3) 关键字可扩展：支持通过 keyword_hints 传入额外关键字提示（逗号分隔）。
+
+    endpoint 示例：
+    - http://MQ_INST_rocketmqrknjgxvxj2ag_ns110601.tdmq-rocketmq5-vpc
+
+  # 输入参数定义
+  input_schema:
+    local_file_path: {{file_path}}  # （可选）用户上传到本地的文件
+
+  # 输出参数定义
+  output_schema:
+    endpoint: string         # 接入点
+    topic: string            # Topic
+    consumer_group: string   # 消费者组
+    topic_route: string      # Topic 路由
+    error_logs: list         # 错误日志数组（逐条）
+    topic_broker_ip_status_list: list  # topic 路由中的 broker ip 及连接状态列表（一个topic可对应多个broker ip）
+
+  # 执行配置：定义技能执行步骤
+  execution:
+    steps:
+      # 步骤1：调用 FileKeywordFilterTool 过滤日志关键字
+      - id: filter_nameserver_in_log_by_keywords
+        type: tool
+        description: "获取nameserver地址"
+        tool: file_keyword_filter
+        input:
+          file_paths:
+            - "{{local_file_path}}"
+          keywords:
+            - "new name server is chosen"
+          case_sensitive: false
+          max_latest_lines: 50
+          after_context_lines: 6
+        output_schema:
+          raw_data_str: string
+          commands: list
+      # 步骤2：LLM 进行参数+文本联合提取，输出统一 JSON
+      - id: extract_nameserver_and_status_by_llm
+        type: llm
+        description: "基于输入信息进行智能分析并输出nameserver地址和连接状态。"
+        prompt: |
+          提取指定的关键信息：
+          1. 提取最新的nameserver地址
+          2. 提取最新nameserver的连接状态
+          3. 输出json: {"nameserver": "填充", "status": "填充"} 
+          
+          用户输入：{{filter_nameserver_in_log_by_keywords.raw_data_str}}
+        output_schema:
+          nameserver: string
+          status: string
+
+      # 步骤3：调用 FileKeywordFilterTool 过滤 topic 路由关键字
+      - id: filter_topic_route_broker_ip_by_keywords
+        type: tool
+        description: "获取 topicRouteTable.put 相关日志"
+        tool: file_keyword_filter
+        input:
+          file_paths:
+            - "{{local_file_path}}"
+          keywords:
+            - "topicRouteTable.put"
+          case_sensitive: false
+          max_latest_lines: 100
+          after_context_lines: 0
+        output_schema:
+          raw_data_str: string
+          commands: list
+
+      # 步骤4：LLM 提取 topic、broker ip 和连接状态（支持一个topic多个broker ip）
+      - id: extract_topic_broker_ip_and_status_by_llm
+        type: llm
+        description: "基于topicRouteTable.put相关日志提取topic、broker ip及连接状态。"
+        prompt: |
+          提取指定的关键信息：
+          1. 从输入中提取 topic
+          2. 从输入中提取 broker ip
+          4. 同一个 topic 可能对应多个 broker ip，必须全部输出
+          5. 只输出 JSON，不要输出解释
+
+          输出格式：
+          {
+            "topic_broker_ip_status_list": [
+              {
+                "topic": "填充",
+                "broker_ip": "填充"
+              }
+            ]
+          }
+
+          用户输入：{{filter_topic_route_broker_ip_by_keywords.raw_data_str}}
+        output_schema:
+          topic_broker_ip_status_list: list
+
+      # 步骤5：调用 FileKeywordFilterTool 过滤 consumer group 关键字
+      - id: filter_consumer_group_by_keywords
+        type: tool
+        description: "根据 start beginning + consumer 过滤 consumer group 相关日志"
+        tool: file_keyword_filter
+        input:
+          file_paths:
+            - "{{local_file_path}}"
+          keywords:
+            - "start beginning"
+            - "consumer"
+          case_sensitive: false
+          max_latest_lines: 100
+          after_context_lines: 6
+        output_schema:
+          raw_data_str: string
+          commands: list
+
+      # 步骤6：LLM 提取 consumer group
+      - id: extract_consumer_group_by_llm
+        type: llm
+        description: "从过滤结果中提取 consumer_group。"
+        prompt: |
+          请从输入日志中提取 consumer group。
+
+          规则：
+          1. 优先提取最新一条日志中的 consumer group
+          2. 若未找到则输出空字符串
+          3. 只输出 JSON，不要输出解释
+
+          输出格式：
+          {
+            "consumer_group": ""
+          }
+
+          用户输入：{{filter_consumer_group_by_keywords.raw_data_str}}
+        output_schema:
+          consumer_group: string
+
+  # 信号配置
+  signal:
+    enable_confidence: false
