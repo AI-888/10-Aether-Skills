@@ -1,0 +1,139 @@
+skill:
+  name: check_namesrv_connectivity
+  version: "1.0"
+  type: atomic
+
+  description: |
+    [内部原子技能] NameServer 连通性检查。
+    从用户输入文本与客户端日志中提取接入点，生成 ping/telnet 命令供用户执行，
+    同时基于客户端日志关键字分析接入点连接状态。
+
+  input_schema:
+    user_text: string
+    local_log_path: string
+    endpoint: string
+
+  output_schema:
+    endpoint: string
+    ping_command: string
+    telnet_command: string
+    endpoint_connection_status: string
+    log_evidence: string
+    recommendation: string
+
+  execution:
+    steps:
+      - id: extract_from_log
+        type: skill
+        description: "复用 extract_mq_fields 从日志中提取 endpoint。"
+        skill: extract_mq_fields
+        input:
+          local_file_path: "{{local_log_path}}"
+
+      - id: extract_endpoint_from_text
+        type: llm
+        description: "从用户文本提取 endpoint。"
+        prompt: |
+          你是 RocketMQ 字段提取助手，只输出 JSON。
+
+          从用户输入中提取 endpoint（接入点），没有则输出空字符串。
+          输出格式：
+          {
+            "endpoint": ""
+          }
+
+          用户输入：{{user_text}}
+        output_schema:
+          endpoint: string
+
+      - id: merge_endpoint
+        type: llm
+        description: "合并 endpoint：入参优先，其次文本提取，再次日志提取。"
+        input_from:
+          - extract_endpoint_from_text.endpoint
+          - extract_from_log.endpoint
+        prompt: |
+          你是字段合并助手，只输出 JSON。
+
+          endpoint 取值优先级：
+          1) 显式入参 endpoint（非空）
+          2) 文本提取 endpoint
+          3) 日志提取 endpoint
+
+          显式入参 endpoint={{endpoint}}
+          文本提取 endpoint={{extract_endpoint_from_text.endpoint}}
+          日志提取 endpoint={{extract_from_log.endpoint}}
+
+          输出：
+          {
+            "endpoint": ""
+          }
+        output_schema:
+          endpoint: string
+
+      - id: generate_connectivity_commands
+        type: llm
+        description: "根据 endpoint 生成 ping/telnet 命令。"
+        input_from:
+          - merge_endpoint.endpoint
+        prompt: |
+          你是网络命令生成助手，只输出 JSON。
+
+          已知 endpoint：{{endpoint}}
+
+          生成命令规则：
+          1) ping 使用 endpoint 的 host 部分
+          2) telnet 默认端口 9876
+          3) 如果 endpoint 为空，则命令返回“无法生成，请提供 endpoint”
+
+          输出格式：
+          {
+            "ping_command": "",
+            "telnet_command": ""
+          }
+        output_schema:
+          ping_command: string
+          telnet_command: string
+
+      - id: check_namesrv_logs
+        type: tool
+        description: "从客户端日志过滤 NameServer 连通性相关关键字。"
+        tool: exec
+        input:
+          command: >-
+            grep -Ei
+            'Can not find name server|fetchNameServerAddr Exception|getAndCreateNameserverChannel.*(timeout|exception)|No name server address|connect to .* failed|name server.*(timeout|failed|exception)'
+            "{{local_log_path}}"
+            | tail -n 300
+
+      - id: analyze_connectivity
+        type: llm
+        description: "分析日志中 endpoint 连通性状态。"
+        input_from:
+          - check_namesrv_logs.stdout
+          - merge_endpoint.endpoint
+          - generate_connectivity_commands.ping_command
+          - generate_connectivity_commands.telnet_command
+        prompt: |
+          你是 RocketMQ NameServer 连通性分析助手，只输出 JSON。
+
+          endpoint：{{endpoint}}
+          ping 命令：{{ping_command}}
+          telnet 命令：{{telnet_command}}
+
+          日志证据：
+          {{stdout}}
+
+          输出格式：
+          {
+            "endpoint_connection_status": "正常/异常/待确认",
+            "log_evidence": "关键日志证据，无证据则说明未发现异常关键字",
+            "recommendation": "建议用户执行 ping/telnet 并根据结果进一步排查"
+          }
+        output_schema:
+          endpoint_connection_status: string
+          log_evidence: string
+          recommendation: string
+
+  signal:
+    enable_confidence: false

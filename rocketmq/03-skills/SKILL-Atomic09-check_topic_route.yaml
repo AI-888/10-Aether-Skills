@@ -1,0 +1,134 @@
+skill:
+  name: check_topic_route
+  version: "1.0"
+  type: atomic
+
+  description: |
+    [内部原子技能] Topic 路由检查。
+    根据用户上传的客户端日志与 topic 名称，检查 topic 路由信息中的 broker 连接状态。
+
+  input_schema:
+    user_text: string
+    local_log_path: string
+    topic: string
+
+  output_schema:
+    topic: string
+    topic_route_connection_status: string
+    route_detail: string
+    broker_status_list: list
+    recommendation: string
+
+  execution:
+    steps:
+      - id: extract_from_log
+        type: skill
+        description: "复用 extract_mq_fields 获取 topic 与 topic_route。"
+        skill: extract_mq_fields
+        input:
+          local_file_path: "{{local_log_path}}"
+
+      - id: extract_topic_from_text
+        type: llm
+        description: "从用户文本提取 topic。"
+        prompt: |
+          你是 RocketMQ 字段提取助手，只输出 JSON。
+
+          从用户输入中提取 topic，未找到输出空字符串。
+
+          输出：
+          {
+            "topic": ""
+          }
+
+          用户输入：{{user_text}}
+        output_schema:
+          topic: string
+
+      - id: merge_topic
+        type: llm
+        description: "合并 topic，入参优先。"
+        input_from:
+          - extract_topic_from_text.topic
+          - extract_from_log.topic
+        prompt: |
+          你是字段合并助手，只输出 JSON。
+
+          topic 优先级：
+          1) 入参 topic（非空）
+          2) 文本提取 topic
+          3) 日志提取 topic
+
+          入参 topic={{topic}}
+          文本 topic={{extract_topic_from_text.topic}}
+          日志 topic={{extract_from_log.topic}}
+
+          输出：
+          {
+            "topic": ""
+          }
+        output_schema:
+          topic: string
+
+      - id: filter_route_logs
+        type: tool
+        description: "过滤 topic 路由和 broker 连接相关日志。"
+        tool: file_keyword_filter
+        input:
+          file_paths:
+            - "{{local_log_path}}"
+          keywords:
+            - "topicRouteTable.put"
+            - "connect"
+            - "broker"
+            - "{{merge_topic.topic}}"
+          case_sensitive: false
+          max_latest_lines: 200
+          after_context_lines: 2
+        output_schema:
+          raw_data_str: string
+          commands: list
+
+      - id: analyze_topic_route
+        type: llm
+        description: "分析 topic 路由中的 broker 连接状态。"
+        input_from:
+          - filter_route_logs.raw_data_str
+          - extract_from_log.topic_broker_ip_status_list
+          - merge_topic.topic
+        prompt: |
+          你是 RocketMQ Topic 路由分析助手，只输出 JSON。
+
+          topic={{topic}}
+
+          日志过滤结果：
+          {{raw_data_str}}
+
+          已提取的 broker 列表：
+          {{topic_broker_ip_status_list}}
+
+          要求：
+          1) 输出 topic 路由中 broker 的连接状态列表
+          2) 总结 topic_route_connection_status（正常/部分异常/异常/待确认）
+          3) 若日志不足，请明确指出并给出补充建议
+
+          输出格式：
+          {
+            "topic_route_connection_status": "",
+            "route_detail": "",
+            "broker_status_list": [
+              {
+                "broker_ip_port": "",
+                "status": ""
+              }
+            ],
+            "recommendation": ""
+          }
+        output_schema:
+          topic_route_connection_status: string
+          route_detail: string
+          broker_status_list: list
+          recommendation: string
+
+  signal:
+    enable_confidence: false

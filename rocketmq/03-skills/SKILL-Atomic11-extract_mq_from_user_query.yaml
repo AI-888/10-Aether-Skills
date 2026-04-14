@@ -1,0 +1,65 @@
+# RocketMQ 原子技能：从用户输入中提取接入点与 Topic
+skill:
+  # 技能名称：从用户输入提取 RocketMQ 关键字段
+  name: extract_mq_from_user_query
+
+  # 技能版本号
+  version: "1.0"
+
+  # 技能类型：atomic 表示原子技能（基础技能，不可再分）
+  type: atomic
+
+  # 技能描述
+  description: |
+    [内部原子技能] 从用户输入文本中提取 RocketMQ 的接入点（endpoint）、Topic 与 AK/SK。
+
+    提取规则：
+    1) 仅基于 user_text 进行提取。
+    2) 若字段不存在，返回空字符串。
+    3) 只输出结构化字段，不做额外推断。
+
+  # 输入参数定义
+  input_schema:
+    param1: {{user_input}}  # 用户输入文本（问题描述、配置片段、日志片段等）
+
+  # 输出参数定义
+  output_schema:
+    endpoint: string   # 接入点
+    topic: string      # Topic
+    ak: string       # AK/SK（如 "ak=xxx,sk=yyy"）
+    sk: string
+
+  # 执行配置：定义技能执行步骤
+  execution:
+    steps:
+      - id: extract_endpoint_topic_by_llm
+        type: llm
+        description: "从用户输入中提取 endpoint、topic 与 aksk。"
+        prompt: |
+          请从用户输入文本中提取以下字段：
+          1) endpoint, 可能包含rmq-, MQ_INST等的域名和端口
+          2) topic
+          3) aksk（AK/SK，可整理为 "ak=xxx,sk=yyy"）
+          4) instance_id, rmq-、rocketmq-前缀的字符串
+          要求：
+          - 只输出 JSON，不要输出解释
+          输出格式：
+          {
+            "endpoint": "",
+            "instance_id": "",
+            "topic": "",
+            "ak": "",
+            "sk": ""
+          }
+          用户输入：发送消息失败。rmq-ae8668ea15.tdmq-rocketmq5-proxy-vpc.shanghai.t.mbc.local:8094, topic=topic123, access key=ak001, secretkey = sk0001
+          用户输入：{{param1}}
+        output_schema:
+          endpoint: string
+          topic: string
+          ak: string
+          sk: string
+          instance_id: string
+
+  # 信号配置
+  signal:
+    enable_confidence: false

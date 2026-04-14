@@ -1,0 +1,101 @@
+skill:
+  name: check_broker_cluster
+  version: "1.0"
+  type: atomic
+
+  description: |
+    [内部原子技能] 检查 broker 集群是否正常。
+    通过执行 clusterList 与 ha list 相关命令，判断集群节点、主从同步与整体健康状态。
+
+  input_schema:
+    endpoint: string
+    nameserver: string
+
+  output_schema:
+    cluster_list_result: string
+    ha_list_result: string
+    broker_cluster_status: string
+    abnormal_nodes: list
+    recommendation: string
+
+  execution:
+    steps:
+      - id: merge_nameserver
+        type: llm
+        description: "合并 nameserver 入参：优先 nameserver，其次 endpoint。"
+        prompt: |
+          你是字段合并助手，只输出 JSON。
+
+          优先级：
+          1) nameserver（若非空）
+          2) endpoint（若非空）
+
+          nameserver={{nameserver}}
+          endpoint={{endpoint}}
+
+          输出：
+          {
+            "nameserver": ""
+          }
+        output_schema:
+          nameserver: string
+
+      - id: run_cluster_list
+        type: tool
+        description: "执行 clusterList。"
+        tool: exec
+        input:
+          command: >-
+            if [ -z "{{merge_nameserver.nameserver}}" ]; then
+              echo "NAMESERVER_EMPTY";
+            else
+              mqadmin clusterList -n "{{merge_nameserver.nameserver}}" 2>&1;
+            fi
+
+      - id: run_ha_list
+        type: tool
+        description: "执行 ha list（用 clusterList 提取到的 brokerName 或全量输出）。"
+        tool: exec
+        input:
+          command: >-
+            if [ -z "{{merge_nameserver.nameserver}}" ]; then
+              echo "NAMESERVER_EMPTY";
+            else
+              mqadmin haStatus -n "{{merge_nameserver.nameserver}}" 2>&1 || mqadmin brokerStatus -n "{{merge_nameserver.nameserver}}" 2>&1;
+            fi
+
+      - id: summarize_cluster_health
+        type: llm
+        description: "汇总 clusterList 和 ha list 输出，判断 broker 集群健康度。"
+        prompt: |
+          你是 RocketMQ Broker 集群健康分析助手，只输出 JSON。
+
+          clusterList 输出：
+          {{run_cluster_list.stdout}}
+
+          ha list 输出：
+          {{run_ha_list.stdout}}
+
+          判断要求：
+          1) 若 nameserver 为空或命令失败，broker_cluster_status=待确认
+          2) 若存在离线 broker、主从不同步、异常节点，broker_cluster_status=异常
+          3) 若仅部分节点异常，broker_cluster_status=部分异常
+          4) 全部正常则 broker_cluster_status=正常
+
+          输出格式：
+          {
+            "cluster_list_result": "clusterList 摘要",
+            "ha_list_result": "ha list 摘要",
+            "broker_cluster_status": "正常/部分异常/异常/待确认",
+            "abnormal_nodes": ["node1", "node2"],
+            "recommendation": "修复建议"
+          }
+        output_schema:
+          cluster_list_result: string
+          ha_list_result: string
+          broker_cluster_status: string
+          abnormal_nodes: list
+          recommendation: string
+
+  signal:
+    enable_confidence: false

@@ -1,0 +1,129 @@
+skill:
+  name: check_topic_exists
+  version: "1.0"
+  type: atomic
+
+  description: |
+    [内部原子技能] 检查 Topic 是否存在。
+    根据用户输入文本/日志提取 topic 与 instance_id，调用工具检查 broker 中是否真实存在该 Topic。
+
+  input_schema:
+    user_text: string
+    local_log_path: string
+    topic: string
+    instance_id: string
+
+  output_schema:
+    topic: string
+    instance_id: string
+    topic_exists: boolean
+    check_detail: string
+    recommendation: string
+
+  execution:
+    steps:
+      - id: extract_from_log
+        type: skill
+        description: "复用 extract_mq_fields 提取 topic。"
+        skill: extract_mq_fields
+        input:
+          local_file_path: "{{local_log_path}}"
+
+      - id: extract_topic_instance_from_text
+        type: llm
+        description: "从用户文本提取 topic 与 instance_id。"
+        prompt: |
+          你是 RocketMQ 字段提取助手，只输出 JSON。
+
+          从用户输入中提取 topic 和 instance_id。
+          未找到则输出空字符串。
+
+          输出格式：
+          {
+            "topic": "",
+            "instance_id": ""
+          }
+
+          用户输入：{{user_text}}
+        output_schema:
+          topic: string
+          instance_id: string
+
+      - id: merge_topic_instance
+        type: llm
+        description: "合并 topic 与 instance_id，入参优先。"
+        input_from:
+          - extract_from_log.topic
+          - extract_topic_instance_from_text.topic
+          - extract_topic_instance_from_text.instance_id
+        prompt: |
+          你是字段合并助手，只输出 JSON。
+
+          字段优先级：
+          1) 显式入参（topic/instance_id）非空优先
+          2) 文本提取
+          3) 日志提取（仅 topic）
+
+          入参：topic={{topic}} instance_id={{instance_id}}
+          文本：topic={{extract_topic_instance_from_text.topic}} instance_id={{extract_topic_instance_from_text.instance_id}}
+          日志：topic={{extract_from_log.topic}}
+
+          输出：
+          {
+            "topic": "",
+            "instance_id": ""
+          }
+        output_schema:
+          topic: string
+          instance_id: string
+
+      - id: check_topic_in_broker
+        type: tool
+        description: "调用工具检查 broker 侧 topic 是否存在。"
+        tool: exec
+        input:
+          command: >-
+            if [ -z "{{merge_topic_instance.topic}}" ]; then
+              echo "TOPIC_EMPTY";
+            elif [ -z "{{merge_topic_instance.instance_id}}" ]; then
+              echo "INSTANCE_EMPTY";
+            else
+              mqadmin topicRoute
+              -n "{{merge_topic_instance.instance_id}}"
+              -t "{{merge_topic_instance.topic}}" 2>&1;
+            fi
+
+      - id: summarize_topic_exists
+        type: llm
+        description: "根据命令输出判断 topic 是否存在。"
+        input_from:
+          - check_topic_in_broker.stdout
+          - merge_topic_instance.topic
+          - merge_topic_instance.instance_id
+        prompt: |
+          你是 RocketMQ Topic 存在性判断助手，只输出 JSON。
+
+          topic={{topic}}
+          instance_id={{instance_id}}
+
+          命令输出：
+          {{stdout}}
+
+          判断规则：
+          1) 若出现 No route info / topic not exist / TOPIC_EMPTY / INSTANCE_EMPTY，则 topic_exists=false
+          2) 若返回 routeData 或 brokerData 等路由信息，则 topic_exists=true
+          3) 不确定时返回 false 并给出补充排查建议
+
+          输出格式：
+          {
+            "topic_exists": false,
+            "check_detail": "",
+            "recommendation": ""
+          }
+        output_schema:
+          topic_exists: boolean
+          check_detail: string
+          recommendation: string
+
+  signal:
+    enable_confidence: false

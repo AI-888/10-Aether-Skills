@@ -99,20 +99,19 @@ skill:
         prompt: |
           提取指定的关键信息：
           1. 从输入中提取 topic
-          2. 从输入中提取 broker ip
+          2. 从输入中提取 broker ip, port
           4. 同一个 topic 可能对应多个 broker ip，必须全部输出
           5. 只输出 JSON，不要输出解释
-
+          
           输出格式：
           {
             "topic_broker_ip_status_list": [
               {
                 "topic": "填充",
-                "broker_ip": "填充"
+                "broker_ip_port": "填充"
               }
             ]
           }
-
           用户输入：{{filter_topic_route_broker_ip_by_keywords.raw_data_str}}
         output_schema:
           topic_broker_ip_status_list: list
