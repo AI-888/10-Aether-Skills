@@ -7,7 +7,7 @@ skill:
     [内部原子技能] 客户端 AKSK 检查。
     1. 基于用户输入文本与日志提取 access_key、secret_key、instance_id、命名空间
     2. 检查日志中是否包含acl授权相关报错
-    3. 并调用 tce mysql 工具校验 aksk、instance_id 在控制面数据中是否存在， 并且对应权限查询
+    3. 并调用mysql 工具校验 aksk、instance_id 在控制面数据中是否存在， 并且对应权限查询
 
   input_schema:
     param1: {{user_input}} # 用户输入文本
@@ -73,10 +73,10 @@ skill:
           result: string
           commands: list
           data: dict
-      - id: check_aksk_in_tce_mysql
+      - id: check_aksk_in_mysql
         type: tool
-        description: "调用 tce mysql aksk、instance_id 是否存在 并且匹配"
-        tool: mysql_query_tce
+        description: "调用 mysql aksk、instance_id 是否存在 并且匹配"
+        tool: mysql_query_by_secret
         input:
           query: |
             select t.tenantInnerId, r.nsName, t.roleName, t.token, r.permissions
@@ -96,7 +96,7 @@ skill:
         description: "汇总日志与 mysql 结果，输出生产者配置是否通过。"
         input_from:
           - check_missing_accesskey_log.data
-          - check_by_tce_mysql.result
+          - check_aksk_in_mysql.result
           - merge_fields.endpoint
           - merge_fields.topic
           - extract_aksk_instance.access_key
@@ -115,7 +115,7 @@ skill:
           日志关键字检查结果：
           {{data}}
 
-          tce mysql 查询结果：
+          mysql 查询结果：
           {{result}}
 
           输出格式：
