@@ -1,0 +1,135 @@
+skill:
+  name: check_aksk
+  version: "1.0"
+  type: atomic
+
+  description: |
+    [内部原子技能] 客户端 AKSK 检查。
+    1. 基于用户输入文本与日志提取 access_key、secret_key、instance_id、命名空间
+    2. 检查日志中是否包含acl授权相关报错
+    3. 并调用 tce mysql 工具校验 aksk、instance_id 在控制面数据中是否存在， 并且对应权限查询
+
+  input_schema:
+    param1: {{user_input}} # 用户输入文本
+    param2: {{file_path}}  # （可选）用户上传到本地的文件路
+
+  output_schema:
+    check_exist_result: string
+    check_send_result: string
+    check_consume_result: string
+  execution:
+    steps:
+      - id: extract_aksk_instance
+        type: llm
+        description: "从用户输入文本提取 access_key、secret_key、instance_id,命名空间"
+        input_from:
+          - param1
+        prompt: |
+          你是 RocketMQ 参数提取助手，只输出 JSON。
+          请从以下用户输入中提取：
+          - access_key/ak
+          - secret_key/sk
+          - instance_id，rmq-、rocketmq-开头
+          - namespace, MQ_INST开头
+          用户输入：
+          {{param1}}
+
+          提取规则：
+          1. 提取不到时返回空字符串
+          2. 不要编造
+          3. 仅输出 JSON，不要输出额外说明
+
+          输出格式：
+          {
+            "access_key": "",
+            "secret_key": "",
+            "instance_id": ""
+            "namespace": ""
+          }
+        output_schema:
+          access_key: string
+          secret_key: string
+          instance_id: string
+          namespace: string
+
+      - id: check_aksk_set_by_user
+        type: tool
+        description: "检查日志中是否存在 access key 不存在相关报错"
+        tool: file_keyword_filter
+        input:
+          file_paths:
+            - "{{param2}}"
+          keywords:
+            - "No accessKey is configured"
+            - "No acl config for"
+            - "No PlainAccessResource for accessKey"
+            - "Check signature failed for accessKey"
+            - "cannot be null and length should longer than"
+          case_sensitive: false
+          max_latest_lines: 100
+          after_context_lines: 3
+          keyword_relation: "or"
+        output_schema:
+          result: string
+          commands: list
+          data: dict
+      - id: check_aksk_in_tce_mysql
+        type: tool
+        description: "调用 tce mysql aksk、instance_id 是否存在 并且匹配"
+        tool: mysql_query_tce
+        input:
+          query: |
+            select t.tenantInnerId, r.nsName, t.roleName, t.token, r.permissions
+            from tdmq_role_token t, tdmq_namespace_role_relationship r on r.tenantInnerId = t.tenantInnerId and r.roleName=t.roleName
+            where t.tenantInnerId='{{extract_aksk_instance.instance_id}}' and r.nsName='{{extract_aksk_instance.namespace}}' and t.token = '{{extract_aksk_instance.access_key}}'
+        output_schema:
+          result: dict,
+          commands: list,
+          query_result: list,
+          query_error: string,
+          total_rows: int,
+          max_output_rows: int,
+          db_connection: dict
+
+      - id: summarize_result
+        type: llm
+        description: "汇总日志与 mysql 结果，输出生产者配置是否通过。"
+        input_from:
+          - check_missing_accesskey_log.data
+          - check_by_tce_mysql.result
+          - merge_fields.endpoint
+          - merge_fields.topic
+          - extract_aksk_instance.access_key
+          - extract_aksk_instance.secret_key
+          - extract_aksk_instance.instance_id
+        prompt: |
+          你是 RocketMQ 生产者配置检查助手，只输出 JSON。
+
+          字段：
+          endpoint={{endpoint}}
+          topic={{topic}}
+          access_key={{access_key}}
+          secret_key={{secret_key}}
+          instance_id={{instance_id}}
+
+          日志关键字检查结果：
+          {{data}}
+
+          tce mysql 查询结果：
+          {{result}}
+
+          输出格式：
+          {
+            "mysql_check_detail": "mysql 查询摘要",
+            "log_check_detail": "日志检查摘要（是否命中 No accessKey is configured / No acl config for）",
+            "producer_config_status": "通过/不通过",
+            "recommendation": "修复建议"
+          }
+        output_schema:
+          mysql_check_detail: string
+          log_check_detail: string
+          producer_config_status: string
+          recommendation: string
+
+  signal:
+    enable_confidence: false

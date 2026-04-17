@@ -26,19 +26,11 @@ skill:
 
   execution:
     steps:
-      - id: extract_context
+      - id: check_producer_aksk
         type: skill
         description: |
-          调用原子技能 extract_mq_fields，从日志文件中提取 RocketMQ 关键字段。
-        skill: extract_mq_fields
-        input:
-          local_file_path: "{{param1}}"
-
-      - id: check_producer_config
-        type: skill
-        description: |
-          调用原子技能 check_producer_config，检查 topic/aksk/instance 配置是否存在。
-        skill: check_producer_config
+          调用原子技能 check_aksk，检查 aksk在日志中是否报错；检查ak sk在服务端是否存在
+        skill: check_aksk
         input:
           user_text: "{{param1}}"
           local_log_path: "{{param2}}"
