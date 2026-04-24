@@ -34,11 +34,12 @@ skill:
         prompt: |
           # Role
           数据提取助手，从用户输入提取参数, 管控=manager,计费=billing,运营端=operation,消息复制=跨地域消息复制=router
+          发货=appserver=发货服务,资源=cloud=资源服务
           
           # 严格输出如下json字段
           {"namespace":"","component_keyword":"","exclude_keywords":[],"log_paths":[],"log_keywords":[]}
           
-          # 映射规则
+          # 映射规则：严格按映射规则转换
           component_keyword: 
           - "namesrv" → "ocloud-tdmq-rocketmq5-namesrv"
           - "broker" → "ocloud-tdmq-rocketmq5-broker"  
@@ -48,27 +49,32 @@ skill:
           - "operation" → "ocloud-tdmq-rocketmq-operation"
           - "router" → "ocloud-tdmq-rocketmq-router"
           - "disperser" → "ocloud-tdmq-rocketmq-disperser"
+          - "appserver" → "ocloud-tdmq-rocketmq-appserver"
+          - "cloud" → "ocloud-tdmq-rocketmq-cloud"
           
-          log_paths: 必须从固定映射中选择；不得新增/删减路径
+          log_paths: 必须严格从固定映射中选择；不得新增/删减路径
           - namesrv: ["/root/logs/rocketmqlogs/"]
           - broker: ["/root/logs/rocketmqlogs/"]
           - proxy: ["/root/logs/rocketmqlogs/"]
+          - appserver: ["/root/logs/"]
           - manager: ["/usr/local/services/tdmq-rocketmq-manager/", "/root/logs/rocketmqlogs/"]
           - billing: ["/usr/local/services/tdmq-rocketmq-billing/"]
           - operation: ["/root/logs/rocketmq-operation/", "/root/logs/rocketmqlogs/"]
           - router: ["/data/logs/rocketmq-router/", "/root/logs/rocketmqlogs/"]
           - disperser: ["/root/logs/"]
+          - cloud: ["/root/logs/"]
           
           namespace: K8s命名空间，无则"" 
           
           exclude_keywords: 排除词数组，无则设置[], 必须含["cmq"]
           
-          log_keywords: 日志搜索关键字数组，无则[]，request id的值也作关键字
+          log_keywords: 日志搜索关键字数组，无则[]，request id: 也是关键字
+          - 错误的日志，关键字：ERROR
+          - 失败的日志，关键字：FAIL
+          - 超时的日志，关键字：TIMEOUT
           
           # 要求
-          - 严格按映射规则转换component_keyword
           - 只输出JSON，无解释
-          - 无组件信息则追问
           
           # 输入
           {{param1}}

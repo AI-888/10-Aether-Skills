@@ -1,7 +1,7 @@
 # RocketMQ 原子技能：基于日志排查网络连接情况
 skill:
   # 技能名称：检查网络连接状态
-  name: check_network_from_log
+  name: check_network_access
 
   # 技能版本号
   version: "2.0"
@@ -11,11 +11,7 @@ skill:
 
   # 技能描述：详细说明该技能的功能和排查范围
   description: |
-    [内部原子技能] 基于 RocketMQ sdk 日志文件排查客户端到服务端网络连接情况。
-    分三步执行：
-    1) 检查 ONS SDK 日志中的网络异常关键字（NameServer 连接失败、Broker 连接失败）
-    2) 检查 RocketMQ 社区版 SDK 日志中的网络异常关键字（待补充）
-    最终由 LLM 汇总所有步骤结果，输出结构化的网络连接诊断结论。
+    [内部原子技能] 在RocketMQ SDK 日志文件中，排查客户端到服务端网络连接情况
 
   # 输入参数定义
   input_schema:

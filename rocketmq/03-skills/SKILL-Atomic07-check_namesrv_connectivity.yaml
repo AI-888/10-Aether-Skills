@@ -5,8 +5,6 @@ skill:
 
   description: |
     [内部原子技能] NameServer 连通性检查。
-    从用户输入文本与客户端日志中提取接入点，生成 ping/telnet 命令供用户执行，
-    同时基于客户端日志关键字分析接入点连接状态。
 
   input_schema:
     user_text: string
