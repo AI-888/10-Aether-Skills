@@ -10,8 +10,8 @@ skill:
     3. 并调用mysql 工具校验 aksk、instance_id 在控制面数据中是否存在， 并且对应权限查询
 
   input_schema:
-    param1: {{user_input}} # 用户输入文本
-    param2: {{file_path}}  # （可选）用户上传到本地的文件路
+    param1: "{{user_input}}" # 用户输入文本
+    param2: "{{file_path}}"  # （可选）用户上传到本地的文件路
 
   output_schema:
     check_exist_result: string

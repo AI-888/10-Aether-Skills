@@ -17,15 +17,7 @@ skill:
     "查看 log"、"Proxy 日志搜索"、"查看错误信息"、"查询 ERROR 日志"、
     "Broker 日志关键字搜索"、"查看运行日志"、"日志排查" 等
     
-    支持的组件及日志路径：
-    - NameServer: /root/logs/rocketmqlogs/
-    - Broker: /root/logs/rocketmqlogs/
-    - Proxy: /root/logs/rocketmqlogs/
-    - Manager: /usr/local/services/tdmq-rocketmq-manager/ /root/logs/rocketmqlogs/
-    - Billing: /usr/local/services/tdmq-rocketmq-billing/
-    - Operation: /root/logs/rocketmq-operation/ /root/logs/rocketmqlogs/
-    - Router: /data/logs/rocketmq-router/ /root/logs/rocketmqlogs/
-    - Disperser: /root/logs/
+    
 
   # 输入参数定义：定义该技能需要的输入参数及其类型
   input_schema:

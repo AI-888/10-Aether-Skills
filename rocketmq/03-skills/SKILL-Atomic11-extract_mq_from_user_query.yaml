@@ -20,7 +20,7 @@ skill:
 
   # 输入参数定义
   input_schema:
-    param1: {{user_input}}  # 用户输入文本（问题描述、配置片段、日志片段等）
+    param1: "{{user_input}}"  # 用户输入文本（问题描述、配置片段、日志片段等）
 
   # 输出参数定义
   output_schema:

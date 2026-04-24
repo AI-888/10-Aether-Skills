@@ -1,0 +1,99 @@
+skill:
+  # 技能名称：解析用户输入并查询指定组件日志
+  name: resolve_and_query_log
+  version: "1.1"
+
+  # 技能类型：sop 表示标准操作流程（由多个步骤组成的复合技能）
+  type: sop
+
+  # 技能描述：面向用户简单查询场景，覆盖自然语言到 k8s 关键字的映射
+  description: |
+    查询 RocketMQ 组件的日志。
+    使用场景：用户询问 "查询 namesrv 日志"、"查看 broker 日志"、"查询 proxy 日志"、
+    "查询 manager 日志"、"查询 billing 日志"、"查询 operation 日志"、
+    "查询 router 日志"、"查询 disperser 日志"、"查询全部日志"、
+
+  # 输入参数定义
+  input_schema:
+    param1: string         # 用户输入的原始文本
+
+  # 输出参数定义
+  output_schema:
+    log_content: string    # 查询到的日志内容
+
+  # 执行步骤（按顺序执行）
+  execution:
+    steps:
+
+      # ── 步骤1：LLM 提取并映射组件名称 ──
+      # 将用户输入的自然语言组件名（如 "broker"）映射为 k8s 实际关键字
+      - id: resolve_component
+        type: llm
+        input:
+          param1: "{{user_input}}"
+        prompt: |
+          # Role
+          数据提取助手，从用户输入提取参数, 管控=manager,计费=billing,运营端=operation,消息复制=跨地域消息复制=router
+          
+          # 严格输出如下json字段
+          {"namespace":"","component_keyword":"","exclude_keywords":[],"log_paths":[],"log_keywords":[]}
+          
+          # 映射规则
+          component_keyword: 
+          - "namesrv" → "ocloud-tdmq-rocketmq5-namesrv"
+          - "broker" → "ocloud-tdmq-rocketmq5-broker"  
+          - "proxy" → "ocloud-tdmq-rocketmq5-proxy"
+          - "manager" → "ocloud-tdmq-rocketmq-manager"
+          - "billing" → "ocloud-tdmq-rocketmq-billing"
+          - "operation" → "ocloud-tdmq-rocketmq-operation"
+          - "router" → "ocloud-tdmq-rocketmq-router"
+          - "disperser" → "ocloud-tdmq-rocketmq-disperser"
+          
+          log_paths: 必须从固定映射中选择；不得新增/删减路径
+          - namesrv: ["/root/logs/rocketmqlogs/"]
+          - broker: ["/root/logs/rocketmqlogs/"]
+          - proxy: ["/root/logs/rocketmqlogs/"]
+          - manager: ["/usr/local/services/tdmq-rocketmq-manager/", "/root/logs/rocketmqlogs/"]
+          - billing: ["/usr/local/services/tdmq-rocketmq-billing/"]
+          - operation: ["/root/logs/rocketmq-operation/", "/root/logs/rocketmqlogs/"]
+          - router: ["/data/logs/rocketmq-router/", "/root/logs/rocketmqlogs/"]
+          - disperser: ["/root/logs/"]
+          
+          namespace: K8s命名空间，无则"" 
+          
+          exclude_keywords: 排除词数组，无则设置[], 必须含["cmq"]
+          
+          log_keywords: 日志搜索关键字数组，无则[]，request id的值也作关键字
+          
+          # 要求
+          - 严格按映射规则转换component_keyword
+          - 只输出JSON，无解释
+          - 无组件信息则追问
+          
+          # 输入
+          {{param1}}
+
+        output_schema:
+          component_keyword: string
+          exclude_keywords: list
+          namespace: string
+          log_paths: list
+          log_keywords: list
+
+      # ── 步骤2：调用原子技能获取日志 ──
+      - id: get_rocketmq_logs
+        type: skill
+        skill: get_k8s_logs
+        input:
+          namespace: "{{resolve_component.namespace}}"
+          pod_keyword: "{{resolve_component.component_keyword}}"
+          log_paths: "{{resolve_component.log_paths}}"
+          log_keywords: "{{resolve_component.log_keywords}}"
+          exclude_keywords: "{{resolve_component.exclude_keywords}}"
+          lines: 200
+        output_schema:
+          log_content: string
+
+  # 信号配置
+  signal:
+    enable_confidence: false
