@@ -1,0 +1,119 @@
+name: code_review
+version: "1.0.0"
+description: >
+  Review a code snippet for correctness, potential bugs, security issues,
+  performance problems, and adherence to best practices. Returns structured
+  feedback organized by severity level.
+category: code
+author: Aether Team
+tags:
+  - code
+  - review
+  - quality
+  - security
+  - best-practices
+
+parameters:
+  - name: code
+    type: string
+    description: The source code to review.
+    required: true
+
+  - name: language
+    type: string
+    description: Programming language of the code (e.g. "python", "javascript", "java").
+    required: true
+
+  - name: focus_areas
+    type: array
+    description: >
+      Specific areas to focus on. Allowed values: "bugs", "security",
+      "performance", "style", "maintainability". When omitted, all areas are reviewed.
+    required: false
+    default: ["bugs", "security", "performance", "style", "maintainability"]
+
+  - name: severity_threshold
+    type: string
+    description: Minimum severity level to include in the report.
+    required: false
+    default: "info"
+    enum:
+      - "critical"
+      - "warning"
+      - "info"
+
+output:
+  type: object
+  description: Structured code review report.
+  schema:
+    type: object
+    properties:
+      summary:
+        type: string
+        description: High-level summary of the overall code quality.
+      issues:
+        type: array
+        description: List of identified issues.
+        items:
+          type: object
+          properties:
+            severity:
+              type: string
+              enum: ["critical", "warning", "info"]
+            category:
+              type: string
+            line:
+              type: integer
+              description: Line number where the issue was found (if applicable).
+            description:
+              type: string
+            suggestion:
+              type: string
+
+examples:
+  - description: Review a simple Python function for bugs and security issues
+    input:
+      code: |
+        def get_user(user_id):
+            query = "SELECT * FROM users WHERE id = " + user_id
+            return db.execute(query)
+      language: "python"
+      focus_areas: ["bugs", "security"]
+    output:
+      summary: "Critical security vulnerability found. Immediate fix required."
+      issues:
+        - severity: "critical"
+          category: "security"
+          line: 2
+          description: "SQL injection vulnerability: user input is concatenated directly into the query."
+          suggestion: "Use parameterized queries: db.execute('SELECT * FROM users WHERE id = ?', (user_id,))"
+
+  - description: Review a JavaScript function for style and maintainability
+    input:
+      code: |
+        function calc(a,b,op){
+          if(op=='add') return a+b
+          if(op=='sub') return a-b
+          if(op=='mul') return a*b
+          if(op=='div') return a/b
+        }
+      language: "javascript"
+      focus_areas: ["style", "maintainability"]
+      severity_threshold: "info"
+    output:
+      summary: "Code works but has style and maintainability issues."
+      issues:
+        - severity: "warning"
+          category: "maintainability"
+          line: 1
+          description: "Function lacks JSDoc comment explaining parameters and return value."
+          suggestion: "Add JSDoc: /** @param {number} a @param {number} b @param {string} op @returns {number} */"
+        - severity: "info"
+          category: "style"
+          line: 1
+          description: "Single-letter parameter names reduce readability."
+          suggestion: "Rename parameters to descriptive names: operandA, operandB, operation."
+        - severity: "warning"
+          category: "maintainability"
+          description: "Division by zero is not handled."
+          suggestion: "Add a guard: if (op === 'div' && b === 0) throw new Error('Division by zero');"

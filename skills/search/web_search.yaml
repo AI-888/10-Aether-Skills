@@ -1,0 +1,84 @@
+name: web_search
+version: "1.0.0"
+description: >
+  Search the web using a natural language query and return a ranked list of
+  relevant results including titles, URLs, and text snippets. Useful for
+  retrieving up-to-date information that may not be in the model's training data.
+category: search
+author: Aether Team
+tags:
+  - search
+  - web
+  - information-retrieval
+  - real-time
+
+parameters:
+  - name: query
+    type: string
+    description: The natural language search query.
+    required: true
+
+  - name: max_results
+    type: integer
+    description: Maximum number of results to return. Must be between 1 and 20.
+    required: false
+    default: 5
+
+  - name: language
+    type: string
+    description: BCP-47 language code to filter results (e.g. "en", "zh", "fr").
+    required: false
+    default: "en"
+
+  - name: safe_search
+    type: boolean
+    description: Whether to enable safe search filtering.
+    required: false
+    default: true
+
+output:
+  type: array
+  description: Ordered list of search result objects, each with title, url, and snippet.
+  schema:
+    type: array
+    items:
+      type: object
+      properties:
+        title:
+          type: string
+          description: Page title.
+        url:
+          type: string
+          description: Full URL of the result.
+        snippet:
+          type: string
+          description: Short text excerpt from the page.
+
+examples:
+  - description: Search for recent news about artificial intelligence
+    input:
+      query: "latest advances in artificial intelligence 2025"
+      max_results: 3
+    output:
+      - title: "Top AI Breakthroughs of 2025"
+        url: "https://example.com/ai-2025"
+        snippet: "Researchers unveiled several landmark models in 2025, including..."
+      - title: "AI in Healthcare: 2025 Roundup"
+        url: "https://example.com/ai-health-2025"
+        snippet: "Hospitals have begun deploying AI diagnostic tools that..."
+      - title: "The State of Generative AI"
+        url: "https://example.com/gen-ai-state"
+        snippet: "Generative AI has matured rapidly, with adoption accelerating..."
+
+  - description: Search in Chinese
+    input:
+      query: "人工智能最新进展"
+      language: "zh"
+      max_results: 2
+    output:
+      - title: "2025年人工智能最新突破"
+        url: "https://example.cn/ai-2025"
+        snippet: "研究人员在2025年发布了多个里程碑式的模型..."
+      - title: "AI在医疗领域的应用"
+        url: "https://example.cn/ai-health"
+        snippet: "医院开始部署AI诊断工具..."
