@@ -4,13 +4,8 @@ skill:
   type: sop
 
   description: |
-    排查 RocketMQ 生产/发送消息失败、超时问题。
+    排查 RocketMQ 生产/发送消息失败
     将排查过程拆分为 5 个维度：客户端、网络、NameServer、Broker、Topic。
-    
-    使用场景：
-    - 用户反馈发送超时、发送失败、消息投递异常
-    - 用户反馈 No route info、topic 不可写、broker busy 等
-    - 用户希望获得结构化排查路径和修复优先级
 
   input_schema:
     param1: {{user_input}} # 用户输入文本
@@ -26,10 +21,10 @@ skill:
 
   execution:
     steps:
-      - id: check_producer_aksk
+      - id: check_aksk
         type: skill
         description: |
-          调用原子技能 check_aksk，检查 aksk在日志中是否报错；检查ak sk在服务端是否存在
+          1. 检查aksk在日志中是否报错
         skill: check_aksk
         input:
           user_text: "{{param1}}"
@@ -41,29 +36,11 @@ skill:
           secret_key: ""
           instance_id: ""
 
-      - id: check_network
-        type: skill
-        description: |
-          调用原子技能 check_network_from_log，从日志检查网络连接状态。
-        skill: check_network_from_log
-        input:
-          local_log_path: "{{param1}}"
-          endpoint: "{{extract_context.endpoint}}"
-
-      - id: check_namesrv
-        type: skill
-        description: |
-          调用原子技能 check_namesrv_connectivity，生成 ping/telnet 命令并分析 namesrv 连通性。
-        skill: check_namesrv_connectivity
-        input:
-          user_text: "{{param1}}"
-          local_log_path: "{{param1}}"
-          endpoint: "{{extract_context.endpoint}}"
-
       - id: check_topic_exists
         type: skill
         description: |
-          调用原子技能 check_topic_exists，检查 topic 在 broker 中是否存在。
+          1. 检查日志中是否存在 topic 不存在或路由失败报错
+          2. 检查 topic是否在每个broker 中是否存在
         skill: check_topic_exists
         input:
           user_text: "{{param1}}"
@@ -71,21 +48,35 @@ skill:
           topic: "{{extract_context.topic}}"
           instance_id: ""
 
-      - id: check_topic_route
+      - id: check_namesrv_connectivity
         type: skill
         description: |
-          调用原子技能 check_topic_route，检查 topic 路由中的 broker 连接状态。
-        skill: check_topic_route
+          1. 检查日志中是否存在连接namesrv报错
+          2. 生成 ping/telnet 命令并分析 namesrv 连通性
+        skill: check_namesrv_connectivity
         input:
           user_text: "{{param1}}"
           local_log_path: "{{param1}}"
-          topic: "{{extract_context.topic}}"
+          endpoint: "{{extract_context.endpoint}}"
 
-      - id: check_broker
+      - id: check_broker_connectivity
         type: skill
         description: |
-          调用原子技能 check_broker_cluster，检查 broker 集群与 HA 状态。
-        skill: check_broker_cluster
+          1. 检查日志中是否存在连接broker报错
+          2. 生成 ping/telnet 命令并分析 broker 连通性
+        skill: check_broker_connectivity
+        input:
+          user_text: "{{param1}}"
+          local_log_path: "{{param1}}"
+          endpoint: "{{extract_context.endpoint}}"
+
+
+
+      - id: check_broker_cluster_health
+        type: skill
+        description: |
+          调用原子技能 check_broker_cluster_health，检查 broker 集群与 HA 状态。
+        skill: check_broker_cluster_health
         input:
           endpoint: "{{extract_context.endpoint}}"
           nameserver: "{{extract_context.endpoint}}"
