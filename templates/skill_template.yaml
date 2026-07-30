@@ -1,0 +1,42 @@
+# Skill Template
+# Copy this file to the appropriate skills/<category>/ folder and fill in each field.
+# Delete this comment block before submitting.
+
+name: skill_name          # Required: snake_case unique identifier
+version: "1.0.0"          # Required: semantic version
+description: >            # Required: what does this skill do? (10+ chars)
+  A concise description of what this skill does and when to use it.
+category: search          # Required: search | code | data | communication
+author: Your Name         # Required: your name or team name
+tags:                     # Required: at least one tag
+  - example
+  - tag
+
+parameters:               # Required: list every input the skill accepts
+  - name: query           # snake_case parameter name
+    type: string          # string | integer | number | boolean | array | object
+    description: The input query string.
+    required: true        # true | false
+
+  - name: max_results
+    type: integer
+    description: Maximum number of results to return.
+    required: false
+    default: 10
+
+output:                   # Required: what does this skill return?
+  type: array             # string | integer | number | boolean | array | object
+  description: A list of result objects.
+
+examples:                 # Required: at least one example
+  - description: Basic usage example
+    input:
+      query: "example search term"
+      max_results: 3
+    output:
+      - title: "Example Result 1"
+        url: "https://example.com/1"
+        snippet: "A relevant snippet from the page."
+      - title: "Example Result 2"
+        url: "https://example.com/2"
+        snippet: "Another relevant snippet."

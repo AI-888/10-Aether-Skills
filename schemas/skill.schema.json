@@ -1,0 +1,123 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/AI-888/10-Aether-Skills/schemas/skill.schema.json",
+  "title": "Aether Skill",
+  "description": "Schema for defining an AI agent skill in the Aether ecosystem",
+  "type": "object",
+  "required": ["name", "version", "description", "category", "author", "tags", "parameters", "output", "examples"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "Unique snake_case identifier for the skill"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version of the skill (e.g. 1.0.0)"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 10,
+      "description": "Clear, concise description of what the skill does"
+    },
+    "category": {
+      "type": "string",
+      "enum": ["search", "code", "data", "communication"],
+      "description": "Category this skill belongs to"
+    },
+    "author": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Name of the author or contributing team"
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "uniqueItems": true,
+      "description": "Keywords to aid skill discovery"
+    },
+    "parameters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "type", "description", "required"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "description": "Parameter name in snake_case"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["string", "integer", "number", "boolean", "array", "object"],
+            "description": "JSON data type of the parameter"
+          },
+          "description": {
+            "type": "string",
+            "description": "What this parameter represents"
+          },
+          "required": {
+            "type": "boolean",
+            "description": "Whether this parameter must be provided"
+          },
+          "default": {
+            "description": "Default value when the parameter is not provided (only for optional parameters)"
+          },
+          "enum": {
+            "type": "array",
+            "description": "Allowed values for this parameter"
+          }
+        }
+      },
+      "description": "List of input parameters accepted by this skill"
+    },
+    "output": {
+      "type": "object",
+      "required": ["type", "description"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["string", "integer", "number", "boolean", "array", "object"],
+          "description": "JSON data type of the output"
+        },
+        "description": {
+          "type": "string",
+          "description": "What the output represents"
+        },
+        "schema": {
+          "type": "object",
+          "description": "Optional JSON schema describing the output structure for complex types"
+        }
+      },
+      "description": "Description of the skill's return value"
+    },
+    "examples": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["description", "input", "output"],
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "What this example demonstrates"
+          },
+          "input": {
+            "type": "object",
+            "description": "Example input values keyed by parameter name"
+          },
+          "output": {
+            "description": "Expected output for the given input"
+          }
+        }
+      },
+      "description": "One or more usage examples for this skill"
+    }
+  }
+}

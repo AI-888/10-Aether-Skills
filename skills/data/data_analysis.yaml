@@ -1,0 +1,103 @@
+name: data_analysis
+version: "1.0.0"
+description: >
+  Analyze structured tabular data provided as a list of records and generate
+  a statistical summary along with key insights. Supports numeric aggregation,
+  distribution analysis, and detection of outliers and trends.
+category: data
+author: Aether Team
+tags:
+  - data
+  - analysis
+  - statistics
+  - insights
+  - tabular
+
+parameters:
+  - name: data
+    type: array
+    description: >
+      List of record objects to analyze. Each record must share the same keys.
+      Example: [{"name": "Alice", "age": 30, "score": 95}, ...]
+    required: true
+
+  - name: target_columns
+    type: array
+    description: >
+      Column names to include in the analysis. When omitted, all numeric
+      columns are analyzed.
+    required: false
+
+  - name: analysis_types
+    type: array
+    description: >
+      Types of analysis to perform. Allowed values: "summary", "outliers",
+      "correlation", "trends". Defaults to ["summary"].
+    required: false
+    default: ["summary"]
+
+  - name: output_format
+    type: string
+    description: Format of the analysis report.
+    required: false
+    default: "structured"
+    enum:
+      - "structured"
+      - "markdown"
+
+output:
+  type: object
+  description: Analysis report containing statistical summaries and insights.
+  schema:
+    type: object
+    properties:
+      columns_analyzed:
+        type: array
+        description: Names of the columns that were analyzed.
+      row_count:
+        type: integer
+        description: Total number of rows in the dataset.
+      statistics:
+        type: object
+        description: Per-column statistics (min, max, mean, median, std_dev).
+      insights:
+        type: array
+        description: Human-readable insight strings derived from the data.
+      outliers:
+        type: object
+        description: Per-column list of detected outlier values (when requested).
+
+examples:
+  - description: Analyze student exam scores
+    input:
+      data:
+        - { name: "Alice", score: 95, study_hours: 10 }
+        - { name: "Bob", score: 72, study_hours: 6 }
+        - { name: "Carol", score: 88, study_hours: 8 }
+        - { name: "Dave", score: 40, study_hours: 2 }
+        - { name: "Eve", score: 91, study_hours: 9 }
+      target_columns: ["score", "study_hours"]
+      analysis_types: ["summary", "outliers"]
+    output:
+      columns_analyzed: ["score", "study_hours"]
+      row_count: 5
+      statistics:
+        score:
+          min: 40
+          max: 95
+          mean: 77.2
+          median: 88
+          std_dev: 21.4
+        study_hours:
+          min: 2
+          max: 10
+          mean: 7
+          median: 8
+          std_dev: 3.0
+      insights:
+        - "Score has high variance (std_dev=21.4), suggesting inconsistent preparation."
+        - "Strong positive correlation expected between study_hours and score."
+        - "Dave's score (40) is a significant outlier — 1.7 standard deviations below the mean."
+      outliers:
+        score: [40]
+        study_hours: [2]
